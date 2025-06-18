@@ -173,13 +173,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         let surfaceNormal = vec3.create();
         if (Math.abs(upVector[1]) > 0.7) { // Floor or near-horizontal surface
           surfaceNormal = vec3.clone(upVector); // Use up-vector as normal
+          console.log('Floor detected, normal:', surfaceNormal);
         } else { // Wall or near-vertical surface
-          // Approximate wall normal using viewer’s forward direction projected onto XZ plane
-          let viewerForward = vec3.fromValues(0, 0, -1); // Viewer’s forward in viewer space
-          vec3.transformQuat(viewerForward, viewerForward, rotation);
-          surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]); // Project onto XZ
+          // Use hit-test pose’s Z-axis as primary normal
+          let poseZ = vec3.fromValues(0, 0, 1); // Pose’s Z-axis
+          vec3.transformQuat(poseZ, poseZ, rotation);
+          vec3.normalize(poseZ, poseZ);
+          // Project onto XZ plane to ensure vertical wall
+          surfaceNormal = vec3.fromValues(poseZ[0], 0, poseZ[2]);
           vec3.normalize(surfaceNormal, surfaceNormal);
-          vec3.negate(surfaceNormal, surfaceNormal); // Point normal inward
+          // Negate if pointing toward viewer (dot product with viewer forward)
+          let viewerForward = vec3.fromValues(0, 0, -1);
+          vec3.transformQuat(viewerForward, viewerForward, rotation);
+          if (vec3.dot(surfaceNormal, viewerForward) > 0) {
+            vec3.negate(surfaceNormal, surfaceNormal);
+          }
+          console.log('Wall detected, normal:', surfaceNormal);
         }
 
         // Align model’s negative Z-axis (glTF front) with surface normal
