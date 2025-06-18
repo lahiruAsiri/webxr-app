@@ -67,8 +67,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       arObject.visible = false;
       scene.addNode(arObject);
 
-      let flower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
-      arObject.addNode(flower);
+      let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
+      arObject.addNode(wallArt);
 
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
@@ -80,8 +80,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       vec3.set(shadow.scale, 0.15, 0.15, 0.15);
       arObject.addNode(shadow);
 
-      const MAX_FLOWERS = 30;
-      let flowers = [];
+      const MAX_OBJECTS = 30;
+      let objects = [];
 
       // Ensure the background is transparent for AR.
       scene.clear = false;
@@ -159,19 +159,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       // Adds a new object to the scene at the
       // specified transform.
       function addARObjectAt(matrix) {
-        let newFlower = arObject.clone();
-        newFlower.visible = true;
-        newFlower.matrix = matrix;
-        scene.addNode(newFlower);
+        let newObject = arObject.clone();
+        newObject.visible = true;
+        newObject.matrix = matrix;
+        scene.addNode(newObject);
 
-        flowers.push(newFlower);
+        objects.push(newObject);
 
         // For performance reasons if we add too many objects start
         // removing the oldest ones to keep the scene complexity
         // from growing too much.
-        if (flowers.length > MAX_FLOWERS) {
-          let oldFlower = flowers.shift();
-          scene.removeNode(oldFlower);
+        if (objects.length > MAX_OBJECTS) {
+          let oldObject = objects.shift();
+          scene.removeNode(oldObject);
         }
       }
 
