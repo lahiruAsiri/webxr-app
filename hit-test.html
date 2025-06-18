@@ -48,7 +48,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       import {Node} from './js/render/core/node.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {DropShadowNode} from './js/render/nodes/drop-shadow.js';
-      import {vec3} from './js/render/math/gl-matrix.js';
+      import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
       import {Ray} from './js/render/math/ray.js';
 
       // XR globals.
@@ -68,17 +68,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       scene.addNode(arObject);
 
       let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
+      // Set initial scale to match Sunflower’s size
+      vec3.set(wallArt.scale, 0.3, 0.3, 0.3);
+      wallArt.onLoad = () => console.log('WallArt.glb loaded successfully');
+      wallArt.onError = (error) => console.error('Error loading WallArt.glb:', error);
       arObject.addNode(wallArt);
 
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
       scene.addNode(reticle);
 
-      // Having a really simple drop shadow underneath an object helps ground
-      // it in the world without adding much complexity.
-      let shadow = new DropShadowNode();
-      vec3.set(shadow.scale, 0.15, 0.15, 0.15);
-      arObject.addNode(shadow);
+      // Temporarily disable shadow to simplify debugging
+      // let shadow = new DropShadowNode();
+      // vec3.set(shadow.scale, 0.15, 0.15, 0.15);
+      // arObject.addNode(shadow);
 
       const MAX_OBJECTS = 30;
       let objects = [];
@@ -92,7 +95,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           onEndSession: onEndSession,
           textEnterXRTitle: "START AR",
           textXRNotFoundTitle: "AR NOT FOUND",
-          textExitXRTitle: "EXIT  AR",
+          textExitXRTitle: "EXIT AR",
         });
         document.querySelector('header').appendChild(xrButton.domElement);
 
@@ -128,10 +131,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
 
-        // In this sample we want to cast a ray straight out from the viewer's
-        // position and render a reticle where it intersects with a real world
-        // surface. To do this we first get the viewer space, then create a
-        // hitTestSource that tracks it.
         session.requestReferenceSpace('viewer').then((refSpace) => {
           xrViewerSpace = refSpace;
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
@@ -156,19 +155,36 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         xrButton.setSession(null);
       }
 
-      // Adds a new object to the scene at the
-      // specified transform.
+      // Adds a new object to the scene, aligning it with the wall’s surface
       function addARObjectAt(matrix) {
         let newObject = arObject.clone();
         newObject.visible = true;
-        newObject.matrix = matrix;
+
+        // Extract position and rotation from the hit-test matrix
+        let hitMatrix = mat4.clone(matrix);
+        let position = vec3.create();
+        let rotation = quat.create();
+        mat4.getTranslation(position, hitMatrix);
+        mat4.getRotation(rotation, hitMatrix);
+
+        // Assume the wall is vertical (normal along XZ plane, Y-up).
+        // Rotate the model to align its negative Z-axis (glTF front) with the wall’s normal.
+        // For a vertical wall, we rotate around the Y-axis to face the wall.
+        let alignRotation = quat.create();
+        quat.rotateY(alignRotation, alignRotation, Math.PI / 2); // Rotate 90 degrees around Y-axis
+
+        // Combine hit-test rotation with alignment rotation
+        quat.multiply(rotation, rotation, alignRotation);
+
+        // Create a new matrix with adjusted rotation
+        let finalMatrix = mat4.create();
+        mat4.fromRotationTranslation(finalMatrix, rotation, position);
+
+        newObject.matrix = finalMatrix;
         scene.addNode(newObject);
 
         objects.push(newObject);
 
-        // For performance reasons if we add too many objects start
-        // removing the oldest ones to keep the scene complexity
-        // from growing too much.
         if (objects.length > MAX_OBJECTS) {
           let oldObject = objects.shift();
           scene.removeNode(oldObject);
@@ -178,23 +194,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       let rayOrigin = vec3.create();
       let rayDirection = vec3.create();
       function onSelect(event) {
+        console.log('Select event triggered', reticle.visible);
         if (reticle.visible) {
-          // The reticle should already be positioned at the latest hit point, 
-          // so we can just use it's matrix to save an unnecessary call to 
-          // event.frame.getHitTestResults.
           addARObjectAt(reticle.matrix);
         }
       }
 
-      // Called every time a XRSession requests that a new frame be drawn.
       function onXRFrame(t, frame) {
         let session = frame.session;
         let pose = frame.getViewerPose(xrRefSpace);
 
         reticle.visible = false;
 
-        // If we have a hit test source, get its results for the frame
-        // and use the pose to display a reticle in the scene.
         if (xrHitTestSource && pose) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
@@ -213,7 +224,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         scene.endFrame();
       }
 
-      // Start the XR application.
       initXR();
     </script>
   </body>
