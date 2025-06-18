@@ -164,26 +164,35 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         mat4.getTranslation(position, hitMatrix);
         mat4.getRotation(rotation, hitMatrix);
 
-        // Get the surface’s up-vector (approximates normal)
+        // Get the surface’s up-vector
         let upVector = vec3.fromValues(0, 1, 0); // Default Y-up
-        vec3.transformQuat(upVector, upVector, rotation); // Transform by hit-test rotation
+        vec3.transformQuat(upVector, upVector, rotation);
         vec3.normalize(upVector, upVector);
 
-        // Align model’s negative Z-axis (glTF front) with the surface normal
-        let targetDir = vec3.clone(upVector); // Surface normal
-        let modelZ = vec3.fromValues(0, 0, -1); // glTF’s negative Z-axis (front face)
-        let alignRotation = quat.create();
-        quat.rotationTo(alignRotation, modelZ, targetDir); // Rotate from model’s Z to surface normal
+        // Determine surface normal based on surface type
+        let surfaceNormal = vec3.create();
+        if (Math.abs(upVector[1]) > 0.7) { // Floor or near-horizontal surface
+          surfaceNormal = vec3.clone(upVector); // Use up-vector as normal
+        } else { // Wall or near-vertical surface
+          // Approximate wall normal using viewer’s forward direction projected onto XZ plane
+          let viewerForward = vec3.fromValues(0, 0, -1); // Viewer’s forward in viewer space
+          vec3.transformQuat(viewerForward, viewerForward, rotation);
+          surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]); // Project onto XZ
+          vec3.normalize(surfaceNormal, surfaceNormal);
+          vec3.negate(surfaceNormal, surfaceNormal); // Point normal inward
+        }
 
-        // Combine hit-test rotation with alignment rotation
+        // Align model’s negative Z-axis (glTF front) with surface normal
+        let modelZ = vec3.fromValues(0, 0, -1); // glTF’s negative Z-axis
+        let alignRotation = quat.create();
+        quat.rotationTo(alignRotation, modelZ, surfaceNormal);
+
+        // Combine rotations
         quat.multiply(rotation, rotation, alignRotation);
 
-        // Create final matrix
+        // Create final matrix with offset to prevent z-fighting
         let finalMatrix = mat4.create();
-        mat4.fromRotationTranslation(finalMatrix, rotation, position);
-
-        // Apply a slight offset to prevent z-fighting with the surface
-        let offset = vec3.scale(vec3.create(), upVector, 0.01); // Move 1cm along normal
+        let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01); // 1cm along normal
         vec3.add(position, position, offset);
         mat4.fromRotationTranslation(finalMatrix, rotation, position);
 
