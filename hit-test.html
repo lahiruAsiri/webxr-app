@@ -68,8 +68,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       scene.addNode(arObject);
 
       let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
-      // Set initial scale to match Sunflower’s size
-      vec3.set(wallArt.scale, 0.3, 0.3, 0.3);
+      vec3.set(wallArt.scale, 0.3, 0.3, 0.3); // Match Sunflower’s scale
       wallArt.onLoad = () => console.log('WallArt.glb loaded successfully');
       wallArt.onError = (error) => console.error('Error loading WallArt.glb:', error);
       arObject.addNode(wallArt);
@@ -125,7 +124,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           });
 
           renderer = new Renderer(gl);
-
           scene.setRenderer(renderer);
         }
 
@@ -140,7 +138,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         session.requestReferenceSpace('local').then((refSpace) => {
           xrRefSpace = refSpace;
-
           session.requestAnimationFrame(onXRFrame);
         });
       }
@@ -155,29 +152,39 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         xrButton.setSession(null);
       }
 
-      // Adds a new object to the scene, aligning it with the wall’s surface
+      // Adds a new object to the scene, aligning it with the surface normal
       function addARObjectAt(matrix) {
         let newObject = arObject.clone();
         newObject.visible = true;
 
-        // Extract position and rotation from the hit-test matrix
+        // Extract position and rotation from hit-test matrix
         let hitMatrix = mat4.clone(matrix);
         let position = vec3.create();
         let rotation = quat.create();
         mat4.getTranslation(position, hitMatrix);
         mat4.getRotation(rotation, hitMatrix);
 
-        // Assume the wall is vertical (normal along XZ plane, Y-up).
-        // Rotate the model to align its negative Z-axis (glTF front) with the wall’s normal.
-        // For a vertical wall, we rotate around the Y-axis to face the wall.
+        // Get the surface’s up-vector (approximates normal)
+        let upVector = vec3.fromValues(0, 1, 0); // Default Y-up
+        vec3.transformQuat(upVector, upVector, rotation); // Transform by hit-test rotation
+        vec3.normalize(upVector, upVector);
+
+        // Align model’s negative Z-axis (glTF front) with the surface normal
+        let targetDir = vec3.clone(upVector); // Surface normal
+        let modelZ = vec3.fromValues(0, 0, -1); // glTF’s negative Z-axis (front face)
         let alignRotation = quat.create();
-        quat.rotateY(alignRotation, alignRotation, Math.PI / 2); // Rotate 90 degrees around Y-axis
+        quat.rotationTo(alignRotation, modelZ, targetDir); // Rotate from model’s Z to surface normal
 
         // Combine hit-test rotation with alignment rotation
         quat.multiply(rotation, rotation, alignRotation);
 
-        // Create a new matrix with adjusted rotation
+        // Create final matrix
         let finalMatrix = mat4.create();
+        mat4.fromRotationTranslation(finalMatrix, rotation, position);
+
+        // Apply a slight offset to prevent z-fighting with the surface
+        let offset = vec3.scale(vec3.create(), upVector, 0.01); // Move 1cm along normal
+        vec3.add(position, position, offset);
         mat4.fromRotationTranslation(finalMatrix, rotation, position);
 
         newObject.matrix = finalMatrix;
@@ -216,11 +223,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         }
 
         scene.startFrame();
-
         session.requestAnimationFrame(onXRFrame);
-
         scene.drawXRFrame(frame, pose);
-
         scene.endFrame();
       }
 
