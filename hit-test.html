@@ -88,24 +88,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       // Ensure the background is transparent for AR.
       scene.clear = false;
 
-      let debugDiv = document.createElement('div');
-      debugDiv.style.position = 'fixed'; // Use fixed to stay on top
-      debugDiv.style.top = '10px';
-      debugDiv.style.left = '10px';
-      debugDiv.style.zIndex = '1000'; // Ensure it’s above other elements
-      debugDiv.style.color = 'red';
-      debugDiv.style.background = 'rgba(255, 255, 255, 0.8)';
-      debugDiv.style.padding = '8px';
-      debugDiv.style.fontSize = '16px';
-      debugDiv.style.border = '1px solid black'; // Visible border
-      document.body.appendChild(debugDiv);
-      debugDiv.innerText = 'Debug Ready'; // Confirm div is created
-
-      function showDebug(message) {
-        debugDiv.innerText = message;
-        // Fallback alert if div isn’t visible
-        alert(message);
-      }
 
       function initXR() {
         xrButton = new WebXRButton({
@@ -192,6 +174,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           surfaceNormal = vec3.clone(upVector);
           surfaceType = 'Floor (White Reticle)';
         } else {
+          // Try pose Z-axis first
           let poseZ = vec3.fromValues(0, 0, 1);
           vec3.transformQuat(poseZ, poseZ, rotation);
           surfaceNormal = vec3.fromValues(poseZ[0], 0, poseZ[2]);
@@ -210,8 +193,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
 
-        // Add corrective rotation for Y-axis walls
-        let correctiveRotation = quat.fromEuler(quat.create(), -90, 0, 0);
+        // Adjust rotation based on surface type
+        let correctiveRotation = quat.create();
+        if (surfaceType.includes('Wall')) {
+          quat.fromEuler(correctiveRotation, 0, 0, 0); // No rotation for walls
+        } else {
+          quat.fromEuler(correctiveRotation, 90, 0, 0); // 90° X-axis for floors
+        }
         quat.multiply(rotation, rotation, correctiveRotation);
         quat.multiply(rotation, rotation, alignRotation);
 
