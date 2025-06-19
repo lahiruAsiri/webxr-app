@@ -224,6 +224,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
             scene.removeNode(currentPoster);
             currentPoster = null;
             document.getElementById('controls').style.display = 'none';
+            // Reset controls only on remove
+            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
+            document.getElementById('scale').value = controls.scale;
+            document.getElementById('posX').value = controls.posX;
+            document.getElementById('posY').value = controls.posY;
+            document.getElementById('posZ').value = controls.posZ;
+            document.getElementById('rotX').value = controls.rotX;
+            document.getElementById('rotY').value = controls.rotY;
+            document.getElementById('rotZ').value = controls.rotZ;
           }
         });
       }
@@ -300,11 +309,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       }
 
       function addARObjectAt(matrix) {
-        // Remove existing poster if any
-        if (currentPoster) {
-          scene.removeNode(currentPoster);
-          currentPoster = null;
-        }
+        // Only place if no poster exists
+        if (currentPoster) return;
 
         let hitMatrix = mat4.clone(matrix);
         let position = vec3.create();
@@ -345,20 +351,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         let newObject = arObject.clone();
         newObject.visible = true;
-        newObject.matrix = finalMatrix;
-        scene.addNode(newObject);
         currentPoster = newObject;
         baseMatrix = mat4.clone(finalMatrix);
 
-        // Reset controls and show panel
-        controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
-        document.getElementById('scale').value = controls.scale;
-        document.getElementById('posX').value = controls.posX;
-        document.getElementById('posY').value = controls.posY;
-        document.getElementById('posZ').value = controls.posZ;
-        document.getElementById('rotX').value = controls.rotX;
-        document.getElementById('rotY').value = controls.rotY;
-        document.getElementById('rotZ').value = controls.rotZ;
+        // Apply current controls
+        updatePosterTransform();
+        scene.addNode(newObject);
+
+        // Show controls
         document.getElementById('controls').style.display = 'block';
       }
 
