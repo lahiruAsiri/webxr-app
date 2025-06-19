@@ -68,7 +68,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       scene.addNode(arObject);
 
       let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
-      vec3.set(wallArt.scale, 0.3, 0.3, 0.3); // Match Sunflower’s scale
+      vec3.set(wallArt.scale, 0.5, 0.5, 0.5); // Match Sunflower’s scale
       wallArt.onLoad = () => console.log('WallArt.glb loaded successfully');
       wallArt.onError = (error) => console.error('Error loading WallArt.glb:', error);
       arObject.addNode(wallArt);
