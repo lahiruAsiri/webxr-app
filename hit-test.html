@@ -88,6 +88,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       // Ensure the background is transparent for AR.
       scene.clear = false;
 
+      let debugDiv = document.createElement('div');
+      debugDiv.style.position = 'absolute';
+      debugDiv.style.top = '10px';
+      debugDiv.style.left = '10px';
+      debugDiv.style.color = 'red';
+      debugDiv.style.background = 'rgba(255, 255, 255, 0.7)';
+      debugDiv.style.padding = '5px';
+      debugDiv.style.fontSize = '14px';
+      document.body.appendChild(debugDiv);
+
+      function showDebug(message) {
+        debugDiv.innerText = message;
+}
+
       function initXR() {
         xrButton = new WebXRButton({
           onRequestSession: onRequestSession,
@@ -154,64 +168,60 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
       // Adds a new object to the scene, aligning it with the surface normal
       function addARObjectAt(matrix) {
-  let newObject = arObject.clone();
-  newObject.visible = true;
+          let newObject = arObject.clone();
+          newObject.visible = true;
 
-  let hitMatrix = mat4.clone(matrix);
-  let position = vec3.create();
-  let rotation = quat.create();
-  mat4.getTranslation(position, hitMatrix);
-  mat4.getRotation(rotation, hitMatrix);
+          let hitMatrix = mat4.clone(matrix);
+          let position = vec3.create();
+          let rotation = quat.create();
+          mat4.getTranslation(position, hitMatrix);
+          mat4.getRotation(rotation, hitMatrix);
 
-  let upVector = vec3.fromValues(0, 1, 0);
-  vec3.transformQuat(upVector, upVector, rotation);
-  vec3.normalize(upVector, upVector);
+          let upVector = vec3.fromValues(0, 1, 0);
+          vec3.transformQuat(upVector, upVector, rotation);
+          vec3.normalize(upVector, upVector);
 
-  let surfaceNormal = vec3.create();
-  if (Math.abs(upVector[1]) > 0.7) {
-    surfaceNormal = vec3.clone(upVector);
-    console.log('Floor detected, normal:', surfaceNormal);
-  } else {
-    // Log pose axes
-    let poseX = vec3.fromValues(1, 0, 0);
-    let poseY = vec3.fromValues(0, 1, 0);
-    let poseZ = vec3.fromValues(0, 0, 1);
-    vec3.transformQuat(poseX, poseX, rotation);
-    vec3.transformQuat(poseY, poseY, rotation);
-    vec3.transformQuat(poseZ, poseZ, rotation);
-    console.log('Wall detected, poseX:', poseX, 'poseY:', poseY, 'poseZ:', poseZ);
+          let surfaceNormal = vec3.create();
+          let surfaceType = '';
+          if (Math.abs(upVector[1]) > 0.7) {
+            surfaceNormal = vec3.clone(upVector);
+            surfaceType = 'Floor';
+          } else {
+            let poseZ = vec3.fromValues(0, 0, 1);
+            vec3.transformQuat(poseZ, poseZ, rotation);
+            surfaceNormal = vec3.fromValues(poseZ[0], 0, poseZ[2]);
+            vec3.normalize(surfaceNormal, surfaceNormal);
+            let viewerForward = vec3.fromValues(0, 0, -1);
+            vec3.transformQuat(viewerForward, viewerForward, rotation);
+            if (vec3.dot(surfaceNormal, viewerForward) > 0) {
+              vec3.negate(surfaceNormal, surfaceNormal);
+            }
+            surfaceType = 'Wall';
+          }
 
-    // Try pose’s Z-axis instead of X-axis
-    surfaceNormal = vec3.fromValues(poseZ[0], 0, poseZ[2]);
-    vec3.normalize(surfaceNormal, surfaceNormal);
-    let viewerForward = vec3.fromValues(0, 0, -1);
-    vec3.transformQuat(viewerForward, viewerForward, rotation);
-    if (vec3.dot(surfaceNormal, viewerForward) > 0) {
-      vec3.negate(surfaceNormal, surfaceNormal);
-    }
-    console.log('Wall normal:', surfaceNormal, 'X-dominant:', Math.abs(surfaceNormal[0]) > Math.abs(surfaceNormal[2]) ? 'Yes' : 'No');
-  }
+          showDebug(`Surface: ${surfaceType}`);
 
-  let modelZ = vec3.fromValues(0, 0, -1);
-  let alignRotation = quat.create();
-  quat.rotationTo(alignRotation, modelZ, surfaceNormal);
+          let modelZ = vec3.fromValues(0, 0, -1);
+          let alignRotation = quat.create();
+          quat.rotationTo(alignRotation, modelZ, surfaceNormal);
 
-  quat.multiply(rotation, rotation, alignRotation);
+          quat.multiply(rotation, rotation, alignRotation);
 
-  let finalMatrix = mat4.create();
-  let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01);
-  vec3.add(position, position, offset);
-  mat4.fromRotationTranslation(finalMatrix, rotation, position);
+          let finalMatrix = mat4.create();
+          let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01);
+          vec3.add(position, position, offset);
+          mat4.fromRotationTranslation(finalMatrix, rotation, position);
 
-  newObject.matrix = finalMatrix;
-  scene.addNode(newObject);
-  objects.push(newObject);
+          newObject.matrix = finalMatrix;
+          scene.addNode(newObject);
+          objects.push(newObject);
 
-  if (objects.length > MAX_OBJECTS) {
-    let oldObject = objects.shift();
-    scene.removeNode(oldObject);
-  }
-}
+          if (objects.length > MAX_OBJECTS) {
+            let oldObject = objects.shift();
+            scene.removeNode(oldObject);
+          }
+        }
+        
       let rayOrigin = vec3.create();
       let rayDirection = vec3.create();
       function onSelect(event) {
