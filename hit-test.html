@@ -88,6 +88,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       // Ensure the background is transparent for AR.
       scene.clear = false;
 
+      let debugDiv = document.createElement('div');
+        debugDiv.style.position = 'fixed';
+        debugDiv.style.top = '10px';
+        debugDiv.style.left = '10px';
+        debugDiv.style.zIndex = '1000';
+        debugDiv.style.color = 'red';
+        debugDiv.style.background = 'rgba(255, 255, 255, 0.8)';
+        debugDiv.style.padding = '8px';
+        debugDiv.style.fontSize = '16px';
+        debugDiv.style.border = '1px solid black';
+        document.body.appendChild(debugDiv);
+        debugDiv.innerText = 'Debug Ready';
+
+        function showDebug(message) {
+          debugDiv.innerText = message;
+          alert(message); // Primary feedback via alert
+        }
 
       function initXR() {
         xrButton = new WebXRButton({
