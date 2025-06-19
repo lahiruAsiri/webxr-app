@@ -192,7 +192,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           surfaceNormal = vec3.clone(upVector);
           surfaceType = 'Floor';
         } else {
-          let viewerForward = vec3.fromValues(90, 0, -1);
+          let viewerForward = vec3.fromValues(-90, 0, -1);
           vec3.transformQuat(viewerForward, viewerForward, rotation);
           surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
           vec3.normalize(surfaceNormal, surfaceNormal);
