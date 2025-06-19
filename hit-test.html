@@ -213,9 +213,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         // Adjust rotation based on surface type
         let correctiveRotation = quat.create();
         if (surfaceType.includes('Wall')) {
-          quat.fromEuler(correctiveRotation, -90, 0, 0); // No rotation for walls
+          quat.fromEuler(correctiveRotation, 0, 0, 0); // No rotation for walls
         } else {
-          quat.fromEuler(correctiveRotation, 90, 0, 0); // 90° X-axis for floors
+          quat.fromEuler(correctiveRotation, -90, 0, 0); // 90° X-axis for floors
         }
         quat.multiply(rotation, rotation, correctiveRotation);
         quat.multiply(rotation, rotation, alignRotation);
