@@ -200,13 +200,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           surfaceType = 'Wall';
         }
 
-        let modelZ = vec3.fromValues(0, 0, -1);
+        let modelZ = vec3.fromValues(0, 0, 1);
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
 
         let correctiveRotation = quat.create();
         if (surfaceType === 'Floor') {
-          quat.fromEuler(correctiveRotation, -90, 0, 0);
+          quat.fromEuler(correctiveRotation, 90, 0, 0);
           quat.multiply(rotation, rotation, correctiveRotation);
         }
         quat.multiply(rotation, rotation, alignRotation);
