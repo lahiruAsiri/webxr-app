@@ -154,68 +154,64 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
       // Adds a new object to the scene, aligning it with the surface normal
       function addARObjectAt(matrix) {
-        let newObject = arObject.clone();
-        newObject.visible = true;
+  let newObject = arObject.clone();
+  newObject.visible = true;
 
-        // Extract position and rotation from hit-test matrix
-        let hitMatrix = mat4.clone(matrix);
-        let position = vec3.create();
-        let rotation = quat.create();
-        mat4.getTranslation(position, hitMatrix);
-        mat4.getRotation(rotation, hitMatrix);
+  let hitMatrix = mat4.clone(matrix);
+  let position = vec3.create();
+  let rotation = quat.create();
+  mat4.getTranslation(position, hitMatrix);
+  mat4.getRotation(rotation, hitMatrix);
 
-        // Get the surface’s up-vector
-        let upVector = vec3.fromValues(0, 1, 0); // Default Y-up
-        vec3.transformQuat(upVector, upVector, rotation);
-        vec3.normalize(upVector, upVector);
+  let upVector = vec3.fromValues(0, 1, 0);
+  vec3.transformQuat(upVector, upVector, rotation);
+  vec3.normalize(upVector, upVector);
 
-        // Determine surface normal based on surface type
-        let surfaceNormal = vec3.create();
-        if (Math.abs(upVector[1]) > 0.7) { // Floor or near-horizontal surface
-          surfaceNormal = vec3.clone(upVector); // Use up-vector as normal
-          console.log('Floor detected, normal:', surfaceNormal);
-        } else { // Wall or near-vertical surface
-          // Use hit-test pose’s X-axis to handle both X- and Y-axis walls
-          let poseX = vec3.fromValues(1, 0, 0); // Pose’s X-axis
-          vec3.transformQuat(poseX, poseX, rotation);
-          vec3.normalize(poseX, poseX);
-          // Project onto XZ plane for vertical wall
-          surfaceNormal = vec3.fromValues(poseX[0], 0, poseX[2]);
-          vec3.normalize(surfaceNormal, surfaceNormal);
-          // Negate if pointing toward viewer
-          let viewerForward = vec3.fromValues(0, 0, -1);
-          vec3.transformQuat(viewerForward, viewerForward, rotation);
-          if (vec3.dot(surfaceNormal, viewerForward) > 0) {
-            vec3.negate(surfaceNormal, surfaceNormal);
-          }
-          console.log('Wall detected, normal:', surfaceNormal, 'X-dominant:', Math.abs(surfaceNormal[0]) > Math.abs(surfaceNormal[2]) ? 'Yes' : 'No');
-        }
+  let surfaceNormal = vec3.create();
+  if (Math.abs(upVector[1]) > 0.7) {
+    surfaceNormal = vec3.clone(upVector);
+    console.log('Floor detected, normal:', surfaceNormal);
+  } else {
+    // Log pose axes
+    let poseX = vec3.fromValues(1, 0, 0);
+    let poseY = vec3.fromValues(0, 1, 0);
+    let poseZ = vec3.fromValues(0, 0, 1);
+    vec3.transformQuat(poseX, poseX, rotation);
+    vec3.transformQuat(poseY, poseY, rotation);
+    vec3.transformQuat(poseZ, poseZ, rotation);
+    console.log('Wall detected, poseX:', poseX, 'poseY:', poseY, 'poseZ:', poseZ);
 
-        // Align model’s negative Z-axis (glTF front) with surface normal
-        let modelZ = vec3.fromValues(0, 0, -1); // glTF’s negative Z-axis
-        let alignRotation = quat.create();
-        quat.rotationTo(alignRotation, modelZ, surfaceNormal);
+    // Try pose’s Z-axis instead of X-axis
+    surfaceNormal = vec3.fromValues(poseZ[0], 0, poseZ[2]);
+    vec3.normalize(surfaceNormal, surfaceNormal);
+    let viewerForward = vec3.fromValues(0, 0, -1);
+    vec3.transformQuat(viewerForward, viewerForward, rotation);
+    if (vec3.dot(surfaceNormal, viewerForward) > 0) {
+      vec3.negate(surfaceNormal, surfaceNormal);
+    }
+    console.log('Wall normal:', surfaceNormal, 'X-dominant:', Math.abs(surfaceNormal[0]) > Math.abs(surfaceNormal[2]) ? 'Yes' : 'No');
+  }
 
-        // Combine rotations
-        quat.multiply(rotation, rotation, alignRotation);
+  let modelZ = vec3.fromValues(0, 0, -1);
+  let alignRotation = quat.create();
+  quat.rotationTo(alignRotation, modelZ, surfaceNormal);
 
-        // Create final matrix with offset to prevent z-fighting
-        let finalMatrix = mat4.create();
-        let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01); // 1cm along normal
-        vec3.add(position, position, offset);
-        mat4.fromRotationTranslation(finalMatrix, rotation, position);
+  quat.multiply(rotation, rotation, alignRotation);
 
-        newObject.matrix = finalMatrix;
-        scene.addNode(newObject);
+  let finalMatrix = mat4.create();
+  let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01);
+  vec3.add(position, position, offset);
+  mat4.fromRotationTranslation(finalMatrix, rotation, position);
 
-        objects.push(newObject);
+  newObject.matrix = finalMatrix;
+  scene.addNode(newObject);
+  objects.push(newObject);
 
-        if (objects.length > MAX_OBJECTS) {
-          let oldObject = objects.shift();
-          scene.removeNode(oldObject);
-        }
-      }
-
+  if (objects.length > MAX_OBJECTS) {
+    let oldObject = objects.shift();
+    scene.removeNode(oldObject);
+  }
+}
       let rayOrigin = vec3.create();
       let rayDirection = vec3.create();
       function onSelect(event) {
