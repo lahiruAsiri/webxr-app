@@ -120,7 +120,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       arObject.visible = false;
       scene.addNode(arObject);
 
-      let wallArt = new Gltf2Node({url: 'media/gltf/wallart1/WallArt.glb'});
+      let wallArt = new Gltf2Node({url: 'media/gltf/wallart1/WallArt.gltf'});
       vec3.set(wallArt.scale, 0.5, 0.5, 0.5);
       wallArt.onLoad = () => console.log('WallArt.glb loaded successfully');
       wallArt.onError = (error) => console.error('Error loading WallArt.glb:', error);
