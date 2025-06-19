@@ -68,7 +68,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       scene.addNode(arObject);
 
       let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
-      vec3.set(wallArt.scale, 0.3, 0.3, 0.3);
+      vec3.set(wallArt.scale, 0.3, 0.3, 0.3); // Match Sunflower’s scale
       wallArt.onLoad = () => console.log('WallArt.glb loaded successfully');
       wallArt.onError = (error) => console.error('Error loading WallArt.glb:', error);
       arObject.addNode(wallArt);
@@ -77,11 +77,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       reticle.visible = false;
       scene.addNode(reticle);
 
+      // Temporarily disable shadow to simplify debugging
+      // let shadow = new DropShadowNode();
+      // vec3.set(shadow.scale, 0.15, 0.15, 0.15);
+      // arObject.addNode(shadow);
+
       const MAX_OBJECTS = 30;
       let objects = [];
 
       // Ensure the background is transparent for AR.
       scene.clear = false;
+
 
       function initXR() {
         xrButton = new WebXRButton({
@@ -102,14 +108,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       }
 
       function onRequestSession() {
-        return navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local'],
-          optionalFeatures: ['hit-test', 'dom-overlay']
-        }).then((session) => {
+        return navigator.xr.requestSession('immersive-ar', {requiredFeatures: ['local', 'hit-test']})
+                           .then((session) => {
           xrButton.setSession(session);
           onSessionStarted(session);
-        }).catch((error) => {
-          alert(`AR Session Error: ${error.message}`);
         });
       }
 
@@ -118,47 +120,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         session.addEventListener('select', onSelect);
 
         if (!gl) {
-          try {
-            gl = createWebGLContext({
-              xrCompatible: true,
-              alpha: true
-            });
-            if (!gl) {
-              alert('Error: Failed to create WebGL context');
-              session.end();
-              return;
-            }
-            renderer = new Renderer(gl);
-            scene.setRenderer(renderer);
-          } catch (error) {
-            alert(`WebGL Error: ${error.message}`);
-            session.end();
-            return;
-          }
+          gl = createWebGLContext({
+            xrCompatible: true
+          });
+
+          renderer = new Renderer(gl);
+          scene.setRenderer(renderer);
         }
 
-        try {
-          session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
-        } catch (error) {
-          alert(`XRWebGLLayer Error: ${error.message}`);
-          session.end();
-          return;
-        }
+        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
 
         session.requestReferenceSpace('viewer').then((refSpace) => {
           xrViewerSpace = refSpace;
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
             xrHitTestSource = hitTestSource;
-          }).catch((error) => {
-            alert(`HitTest Error: ${error.message}`);
           });
         });
 
         session.requestReferenceSpace('local').then((refSpace) => {
           xrRefSpace = refSpace;
           session.requestAnimationFrame(onXRFrame);
-        }).catch((error) => {
-          alert(`RefSpace Error: ${error.message}`);
         });
       }
 
@@ -172,6 +153,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         xrButton.setSession(null);
       }
 
+      // Adds a new object to the scene, aligning it with the surface normal
       function addARObjectAt(matrix) {
         let newObject = arObject.clone();
         newObject.visible = true;
@@ -190,25 +172,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         let surfaceType = '';
         if (Math.abs(upVector[1]) > 0.7) {
           surfaceNormal = vec3.clone(upVector);
-          surfaceType = 'Floor';
+          surfaceType = 'Floor (White Reticle)';
         } else {
-          let viewerForward = vec3.fromValues(-90, 0, -1);
-          vec3.transformQuat(viewerForward, viewerForward, rotation);
-          surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
+          let poseZ = vec3.fromValues(0, 0, 1);
+          vec3.transformQuat(poseZ, poseZ, rotation);
+          surfaceNormal = vec3.fromValues(poseZ[0], 0, poseZ[2]);
           vec3.normalize(surfaceNormal, surfaceNormal);
-          vec3.negate(surfaceNormal, surfaceNormal);
-          surfaceType = 'Wall';
+          let viewerForward = vec3.fromValues(0, 0, -1);
+          vec3.transformQuat(viewerForward, viewerForward, rotation);
+          if (vec3.dot(surfaceNormal, viewerForward) > 0) {
+            vec3.negate(surfaceNormal, surfaceNormal);
+          }
+          surfaceType = 'Wall (Blue Reticle)';
         }
 
-        let modelZ = vec3.fromValues(-90, 90, 1);
+        let modelZ = vec3.fromValues(0, 0, -1);
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
 
-        let correctiveRotation = quat.create();
-        if (surfaceType === 'Floor') {
-          quat.fromEuler(correctiveRotation, 90, 0, 0);
-          quat.multiply(rotation, rotation, correctiveRotation);
-        }
+        // Add corrective rotation for Y-axis walls
+        let correctiveRotation = quat.fromEuler(quat.create(), -90, 0, 0);
+        quat.multiply(rotation, rotation, correctiveRotation);
         quat.multiply(rotation, rotation, alignRotation);
 
         let finalMatrix = mat4.create();
@@ -229,6 +213,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       let rayOrigin = vec3.create();
       let rayDirection = vec3.create();
       function onSelect(event) {
+        console.log('Select event triggered', reticle.visible);
         if (reticle.visible) {
           addARObjectAt(reticle.matrix);
         }
