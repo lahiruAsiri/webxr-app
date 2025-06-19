@@ -206,7 +206,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         let correctiveRotation = quat.create();
         if (surfaceType === 'Floor') {
-          quat.fromEuler(correctiveRotation, 90, 0, 0);
+          quat.fromEuler(correctiveRotation, -90, 0, 0);
           quat.multiply(rotation, rotation, correctiveRotation);
         }
         quat.multiply(rotation, rotation, alignRotation);
