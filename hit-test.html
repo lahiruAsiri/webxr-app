@@ -59,7 +59,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       <details open>
         <summary>Hit Test</summary>
         <p>
-          Tap on a wall (blue reticle) to place a poster. Use the controls to adjust size, position, and rotation. Click "Remove Poster" to place a new one.
+          Tap on a wall (blue reticle) to place a poster. Use sliders to adjust size, position, and rotation, or drag with one finger to rotate around X/Y axes, pinch with two fingers to rotate around Z axis. Click "Remove Poster" to place a new one.
           <a class="back" href="./">Back</a>
         </p>
       </details>
@@ -145,6 +145,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         rotZ: 0
       };
 
+      // Touch control variables
+      let isDragging = false;
+      let isPinching = false;
+      let lastTouchX = 0;
+      let lastTouchY = 0;
+      let initialPinchAngle = 0;
+
       function updatePosterTransform() {
         if (!currentPoster) return;
 
@@ -171,6 +178,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
 
         currentPoster.matrix = transformMatrix;
+
+        // Update sliders to reflect touch changes
+        document.getElementById('rotX').value = controls.rotX;
+        document.getElementById('rotY').value = controls.rotY;
+        document.getElementById('rotZ').value = controls.rotZ;
       }
 
       function initXR() {
@@ -235,6 +247,53 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
             document.getElementById('rotZ').value = controls.rotZ;
           }
         });
+
+        // Setup touch controls on canvas
+        const canvas = document.querySelector('canvas');
+        if (canvas) {
+          canvas.addEventListener('touchstart', (e) => {
+            if (!currentPoster) return;
+            e.preventDefault();
+            if (e.touches.length === 1) {
+              isDragging = true;
+              lastTouchX = e.touches[0].clientX;
+              lastTouchY = e.touches[0].clientY;
+            } else if (e.touches.length === 2) {
+              isPinching = true;
+              const dx = e.touches[1].clientX - e.touches[0].clientX;
+              const dy = e.touches[1].clientY - e.touches[0].clientY;
+              initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+            }
+          });
+
+          canvas.addEventListener('touchmove', (e) => {
+            if (!currentPoster) return;
+            e.preventDefault();
+            if (isDragging && e.touches.length === 1) {
+              const touchX = e.touches[0].clientX;
+              const touchY = e.touches[0].clientY;
+              const deltaX = touchX - lastTouchX;
+              const deltaY = touchY - lastTouchY;
+              controls.rotY += deltaX * 0.5; // Horizontal drag -> Y rotation
+              controls.rotX += deltaY * 0.5; // Vertical drag -> X rotation
+              lastTouchX = touchX;
+              lastTouchY = touchY;
+              updatePosterTransform();
+            } else if (isPinching && e.touches.length === 2) {
+              const dx = e.touches[1].clientX - e.touches[0].clientX;
+              const dy = e.touches[1].clientY - e.touches[0].clientY;
+              const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+              controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
+              initialPinchAngle = currentAngle;
+              updatePosterTransform();
+            }
+          });
+
+          canvas.addEventListener('touchend', (e) => {
+            isDragging = false;
+            isPinching = false;
+          });
+        }
       }
 
       function onRequestSession() {
