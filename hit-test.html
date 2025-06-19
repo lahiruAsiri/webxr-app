@@ -51,6 +51,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         cursor: pointer;
       }
       .controls button:hover { background: #cc0000; }
+      #guidance {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        z-index: 1000;
+        font-family: Arial, sans-serif;
+        display: none;
+      }
     </style>
     <title>Hit Test</title>
   </head>
@@ -59,11 +72,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       <details open>
         <summary>Hit Test</summary>
         <p>
-          Tap on a wall (blue reticle) to place a poster. Use sliders to adjust size, position, and rotation, or drag with one finger to rotate around X/Y axes, pinch with two fingers to rotate around Z axis. Click "Remove Poster" to place a new one.
+          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Z axis) to adjust. Click "Remove Poster" to place a new one.
           <a class="back" href="./">Back</a>
         </p>
       </details>
     </header>
+    <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
     <div class="controls" id="controls" style="display: none;">
       <div>
         <label>Size:</label>
@@ -151,6 +165,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       let lastTouchX = 0;
       let lastTouchY = 0;
       let initialPinchAngle = 0;
+      let initialPinchDistance = 0;
+      let lastPose = null;
 
       function updatePosterTransform() {
         if (!currentPoster) return;
@@ -179,10 +195,61 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         currentPoster.matrix = transformMatrix;
 
-        // Update sliders to reflect touch changes
+        // Update sliders
+        document.getElementById('scale').value = controls.scale;
+        document.getElementById('posX').value = controls.posX;
+        document.getElementById('posY').value = controls.posY;
+        document.getElementById('posZ').value = controls.posZ;
         document.getElementById('rotX').value = controls.rotX;
         document.getElementById('rotY').value = controls.rotY;
         document.getElementById('rotZ').value = controls.rotZ;
+      }
+
+      // Raycasting to check if touch hits the poster
+      function rayIntersectsPoster(touchX, touchY, canvas, pose) {
+        if (!currentPoster || !pose) return false;
+
+        // Convert touch to normalized device coordinates (-1 to 1)
+        const rect = canvas.getBoundingClientRect();
+        const ndcX = (2.0 * touchX - rect.width) / rect.width;
+        const ndcY = (rect.height - 2.0 * touchY) / rect.height;
+
+        // Get projection and view matrices
+        const projectionMatrix = mat4.create();
+        const fov = 60 * Math.PI / 180; // Assume 60° FOV
+        mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
+        const viewMatrix = pose.views[0].transform.inverse.matrix;
+
+        // Create ray in world space
+        const rayOrigin = vec3.create();
+        const rayEnd = vec3.fromValues(ndcX, ndcY, -1);
+        const rayOriginView = vec3.fromValues(ndcX, ndcY, -1);
+        const rayEndView = vec3.fromValues(ndcX, ndcY, 1);
+        mat4.invert(projectionMatrix, projectionMatrix);
+        vec3.transformMat4(rayOriginView, rayOriginView, projectionMatrix);
+        vec3.transformMat4(rayEndView, rayEndView, projectionMatrix);
+        vec3.transformMat4(rayOrigin, rayOriginView, viewMatrix);
+        vec3.transformMat4(rayEnd, rayEndView, viewMatrix);
+        const rayDirection = vec3.create();
+        vec3.subtract(rayDirection, rayEnd, rayOrigin);
+        vec3.normalize(rayDirection, rayDirection);
+
+        // Get poster’s world position
+        const posterMatrix = currentPoster.matrix;
+        const posterPosition = vec3.create();
+        mat4.getTranslation(posterPosition, posterMatrix);
+
+        // Approximate poster as a sphere (radius based on scale)
+        const radius = controls.scale * 0.25; // Assume WallArt.glb is ~0.5m wide
+        const ray = new Ray(rayOrigin, rayDirection);
+        const toPoster = vec3.create();
+        vec3.subtract(toPoster, posterPosition, rayOrigin);
+        const t = vec3.dot(toPoster, rayDirection);
+        if (t < 0) return false;
+        const closestPoint = vec3.create();
+        vec3.scaleAndAdd(closestPoint, rayOrigin, rayDirection, t);
+        const distance = vec3.distance(closestPoint, posterPosition);
+        return distance < radius;
       }
 
       function initXR() {
@@ -206,45 +273,48 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         document.getElementById('scale').addEventListener('input', (e) => {
           controls.scale = parseFloat(e.target.value);
           updatePosterTransform();
+          // alert(`Scale updated to ${controls.scale}`); // Uncomment to debug
         });
         document.getElementById('posX').addEventListener('input', (e) => {
           controls.posX = parseFloat(e.target.value);
           updatePosterTransform();
+          // alert(`posX updated to ${controls.posX}`); // Uncomment to debug
         });
         document.getElementById('posY').addEventListener('input', (e) => {
           controls.posY = parseFloat(e.target.value);
           updatePosterTransform();
+          // alert(`posY updated to ${controls.posY}`); // Uncomment to debug
         });
         document.getElementById('posZ').addEventListener('input', (e) => {
           controls.posZ = parseFloat(e.target.value);
           updatePosterTransform();
+          // alert(`posZ updated to ${controls.posZ}`); // Uncomment to debug
         });
         document.getElementById('rotX').addEventListener('input', (e) => {
           controls.rotX = parseFloat(e.target.value);
           updatePosterTransform();
+          // alert(`rotX updated to ${controls.rotX}`); // Uncomment to debug
         });
         document.getElementById('rotY').addEventListener('input', (e) => {
           controls.rotY = parseFloat(e.target.value);
           updatePosterTransform();
+          // alert(`rotY updated to ${controls.rotY}`); // Uncomment to debug
         });
         document.getElementById('rotZ').addEventListener('input', (e) => {
           controls.rotZ = parseFloat(e.target.value);
           updatePosterTransform();
+          // alert(`rotZ updated to ${controls.rotZ}`); // Uncomment to debug
         });
         document.getElementById('removePoster').addEventListener('click', () => {
           if (currentPoster) {
             scene.removeNode(currentPoster);
             currentPoster = null;
             document.getElementById('controls').style.display = 'none';
-            // Reset controls only on remove
+            document.getElementById('guidance').style.display = 'block';
+            // Reset controls
             controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
-            document.getElementById('scale').value = controls.scale;
-            document.getElementById('posX').value = controls.posX;
-            document.getElementById('posY').value = controls.posY;
-            document.getElementById('posZ').value = controls.posZ;
-            document.getElementById('rotX').value = controls.rotX;
-            document.getElementById('rotY').value = controls.rotY;
-            document.getElementById('rotZ').value = controls.rotZ;
+            updatePosterTransform();
+            // alert('Poster removed'); // Uncomment to debug
           }
         });
 
@@ -252,17 +322,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         const canvas = document.querySelector('canvas');
         if (canvas) {
           canvas.addEventListener('touchstart', (e) => {
-            if (!currentPoster) return;
+            if (!currentPoster || !lastPose) return;
             e.preventDefault();
-            if (e.touches.length === 1) {
+            const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
+            if (e.touches.length === 1 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
               isDragging = true;
-              lastTouchX = e.touches[0].clientX;
-              lastTouchY = e.touches[0].clientY;
-            } else if (e.touches.length === 2) {
+              lastTouchX = touchX;
+              lastTouchY = touchY;
+            } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
               isPinching = true;
               const dx = e.touches[1].clientX - e.touches[0].clientX;
               const dy = e.touches[1].clientY - e.touches[0].clientY;
               initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+              initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
             }
           });
 
@@ -282,8 +355,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
             } else if (isPinching && e.touches.length === 2) {
               const dx = e.touches[1].clientX - e.touches[0].clientX;
               const dy = e.touches[1].clientY - e.touches[0].clientY;
+              const currentDistance = Math.sqrt(dx * dx + dy * dy);
               const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+              // Adjust scale based on pinch distance
+              const scaleChange = currentDistance / initialPinchDistance;
+              controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
+              // Adjust Z rotation based on angle
               controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
+              initialPinchDistance = currentDistance;
               initialPinchAngle = currentAngle;
               updatePosterTransform();
             }
@@ -298,8 +377,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
       function onRequestSession() {
         return navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local'],
-          optionalFeatures: ['hit-test', 'dom-overlay']
+          requiredFeatures: ['local', 'dom-overlay'],
+          optionalFeatures: ['hit-test'],
+          domOverlay: { root: document.body }
         }).then((session) => {
           xrButton.setSession(session);
           onSessionStarted(session);
@@ -355,6 +435,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         }).catch((error) => {
           alert(`RefSpace Error: ${error.message}`);
         });
+
+        // Show guidance initially
+        document.getElementById('guidance').style.display = 'block';
       }
 
       function onEndSession(session) {
@@ -417,8 +500,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         updatePosterTransform();
         scene.addNode(newObject);
 
-        // Show controls
+        // Show controls, hide guidance
         document.getElementById('controls').style.display = 'block';
+        document.getElementById('guidance').style.display = 'none';
       }
 
       let rayOrigin = vec3.create();
@@ -432,15 +516,32 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       function onXRFrame(t, frame) {
         let session = frame.session;
         let pose = frame.getViewerPose(xrRefSpace);
+        lastPose = pose;
 
         reticle.visible = false;
+        document.getElementById('guidance').style.display = currentPoster ? 'none' : 'block';
 
-        if (xrHitTestSource && pose) {
+        if (xrHitTestSource && pose && !currentPoster) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
-            let pose = hitTestResults[0].getPose(xrRefSpace);
-            reticle.visible = true;
-            reticle.matrix = pose.transform.matrix;
+            let hitPose = hitTestResults[0].getPose(xrRefSpace);
+            let hitMatrix = hitPose.transform.matrix;
+            let position = vec3.create();
+            let rotation = quat.create();
+            mat4.getTranslation(position, hitMatrix);
+            mat4.getRotation(rotation, hitMatrix);
+
+            let upVector = vec3.fromValues(0, 1, 0);
+            vec3.transformQuat(upVector, upVector, rotation);
+            vec3.normalize(upVector, upVector);
+
+            let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
+
+            if (surfaceType === 'Wall') {
+              reticle.visible = true;
+              reticle.matrix = hitMatrix;
+              document.getElementById('guidance').style.display = 'none';
+            }
           }
         }
 
