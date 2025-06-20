@@ -72,7 +72,7 @@
             <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
             <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
-          <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
+          <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
             Remove Poster
           </button>
         </div>
@@ -100,7 +100,6 @@
       scene.enableStats(false);
 
       let arObject = new Node();
-      arObject.visible = false;
       scene.addNode(arObject);
 
       let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
@@ -109,12 +108,11 @@
       wallArt.onError = (error) => console.error('Error loading WallArt.glb:', error);
       arObject.addNode(wallArt);
 
-      // New: Image plane as glTF model
       let imagePlane = new Gltf2Node({url: 'media/gltf/imagePlane/imagePlane.gltf'});
       imagePlane.onLoad = () => console.log('imagePlane.gltf loaded successfully');
       imagePlane.onError = (error) => console.error('Error loading imagePlane.gltf:', error);
-      mat4.translate(imagePlane.matrix, imagePlane.matrix, [0, 0, 0.01]); // Offset in front of wallArt
-      vec3.set(imagePlane.scale, 0.5, 0.5, 1); // Match wallArt size
+      mat4.translate(imagePlane.matrix, imagePlane.matrix, [0, 0, 0.02]); // Increased offset
+      vec3.set(imagePlane.scale, 0.48, 0.48, 1); // Slightly smaller than wallArt
       arObject.addNode(imagePlane);
 
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
@@ -168,6 +166,14 @@
         mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
 
         currentPoster.matrix = transformMatrix;
+        currentPoster.visible = true; // Ensure visibility
+
+        console.log('Poster transform updated:', {
+          position: position,
+          rotation: rotation,
+          scale: controls.scale,
+          visible: currentPoster.visible
+        });
 
         document.getElementById('scale').value = controls.scale;
         document.getElementById('posX').value = controls.posX;
@@ -372,7 +378,7 @@
             renderer = new Renderer(gl);
             scene.setRenderer(renderer);
           } catch (error) {
-            alert(`Error: ${error.message}`);
+            alert(`WebGL Error: ${error.message}`);
             session.end();
             return;
           }
@@ -381,7 +387,7 @@
         try {
           session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
         } catch (error) {
-          alert(`XRLayer Error: ${error.message}`);
+          alert(`XRWebGLLayer Error: ${error.message}`);
           session.end();
           return;
         }
@@ -422,37 +428,37 @@
         let position = vec3.create();
         let rotation = quat.create();
         mat4.getTranslation(position, hitMatrix);
-        let upVector = vec3.create();
-        vec3.set(upVector, 0, 1, 0);
+        mat4.getRotation(rotation, hitMatrix);
+
+        let upVector = vec3.fromValues(0, 1, 0);
         vec3.transformQuat(upVector, upVector, rotation);
         vec3.normalize(upVector, upVector);
 
         let surfaceNormal = vec3.create();
         let surfaceType = '';
-        if (Math.abs(upVector[2]) > 0.7) {
+        console.log('Up vector:', upVector);
+        if (Math.abs(upVector[1]) > 0.7) {
           surfaceNormal = vec3.clone(upVector);
-          surfaceType = 'Wall Art';
+          surfaceType = 'Floor';
         } else {
-          let viewerForward = vec3.fromValues(-90, 0, 0);
-          vec3.transformQuat(viewerForward, viewerForward, rotation);
-          surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
-          vec3.normalize(surfaceNormal, surfaceNormal);
-          vec3.negate(surfaceNormal, surfaceNormal);
+          surfaceNormal = vec3.fromValues(0, 0, -1); // Assume wall normal
           surfaceType = 'Wall';
         }
+        console.log('Surface type:', surfaceType);
 
-        if (surfaceType !== 'Wall') return;
+        if (surfaceType !== 'Wall') {
+          console.log('Not a wall, skipping poster placement');
+          return;
+        }
 
-        let modelZ = vec3.create();
-        vec3.set(modelZ, 0, 0, -0);
+        let modelZ = vec3.fromValues(0, 0, -1);
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
 
         let finalMatrix = mat4.create();
         let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01);
         vec3.add(position, position, offset);
-        mat4.fromRotationTranslation(finalMatrix, rotation, position);
-        mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
+        mat4.fromRotationTranslation(finalMatrix, alignRotation, position);
 
         let yRotationQuat = quat.create();
         quat.fromEuler(yRotationQuat, 0, 90, 0);
@@ -464,8 +470,14 @@
         currentPoster = newObject;
         baseMatrix = mat4.clone(finalMatrix);
 
-        updatePosterTransform();
         scene.addNode(newObject);
+        console.log('Poster added:', {
+          matrix: finalMatrix,
+          children: newObject.children.length,
+          visible: newObject.visible
+        });
+
+        updatePosterTransform();
 
         document.getElementById('controls').style.display = 'block';
         document.getElementById('guidance').style.display = 'none';
@@ -475,6 +487,7 @@
       let rayDirection = vec3.create();
       function onSelect(event) {
         if (reticle.visible) {
+          console.log('Select event triggered, adding poster at reticle position');
           addARObjectAt(reticle.matrix);
         }
       }
@@ -502,6 +515,7 @@
             vec3.normalize(upVector, upVector);
 
             let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
+            console.log('Hit test surface:', surfaceType, 'Up vector:', upVector);
 
             if (surfaceType === 'Wall') {
               reticle.visible = true;
