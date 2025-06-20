@@ -34,6 +34,20 @@
         border-radius: 5px;
         backdrop-filter: blur(5px);
       }
+      #loadingStatus {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 1001;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 10px;
+        border-radius: 5px;
+        backdrop-filter: blur(5px);
+        font-size: 12px;
+      }
+      .loading { color: orange; }
+      .loaded { color: green; }
+      .error { color: red; }
     </style>
     <title>PNG Wall Art AR</title>
   </head>
@@ -48,6 +62,11 @@
       </details>
     </header>
     
+    <!-- Loading Status -->
+    <div id="loadingStatus">
+      <div id="statusText" class="loading">Loading default image...</div>
+    </div>
+    
     <!-- Image Selection Section -->
     <div id="imageSelection">
       <select id="imageSelect" class="mb-2 p-2 border rounded">
@@ -55,6 +74,7 @@
         <option value="media/images/wallart2.png">Wall Art 2</option>
         <option value="media/images/wallart3.png">Wall Art 3</option>
         <option value="media/images/poster.png">Poster</option>
+        <option value="fallback">Use Fallback Pattern</option>
       </select>
       <div class="text-sm text-gray-600">Select your wall art</div>
     </div>
@@ -121,6 +141,7 @@
       // Image texture globals
       let imageTexture = null;
       let currentImagePath = 'media/images/wallart1.png'; // Default image
+      let isImageLoaded = false;
 
       // Reticle for hit testing
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
@@ -140,14 +161,49 @@
         rotZ: 0
       };
 
-      // Touch control variables
-      let isDragging = false;
-      let isPinching = false;
-      let lastTouchX = 0;
-      let lastTouchY = 0;
-      let initialPinchAngle = 0;
-      let initialPinchDistance = 0;
-      let lastPose = null;
+      // Status update function
+      function updateStatus(message, className = 'loading') {
+        const statusText = document.getElementById('statusText');
+        statusText.textContent = message;
+        statusText.className = className;
+      }
+
+      // Create a fallback texture with a simple pattern
+      function createFallbackTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        
+        // Create a simple geometric pattern
+        ctx.fillStyle = '#4A90E2';
+        ctx.fillRect(0, 0, 256, 256);
+        
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('WALL ART', 128, 128);
+        
+        // Create checkerboard pattern
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        for (let i = 0; i < 8; i++) {
+          for (let j = 0; j < 8; j++) {
+            if ((i + j) % 2 === 0) {
+              ctx.fillRect(i * 32, j * 32, 32, 32);
+            }
+          }
+        }
+        
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        
+        return texture;
+      }
 
       // Create a plane geometry for the wall art
       function createWallArtGeometry() {
@@ -224,35 +280,90 @@
         return node;
       }
 
-      // Load texture from image
+      // Load texture from image with better error handling
       function loadTexture(imageUrl) {
         return new Promise((resolve, reject) => {
+          updateStatus(`Loading ${imageUrl}...`, 'loading');
+          
+          if (imageUrl === 'fallback') {
+            // Use fallback texture
+            setTimeout(() => {
+              const texture = createFallbackTexture();
+              updateStatus('Using fallback pattern', 'loaded');
+              resolve(texture);
+            }, 100);
+            return;
+          }
+          
           const texture = gl.createTexture();
           const image = new Image();
           
+          // Set a timeout for loading
+          const timeout = setTimeout(() => {
+            updateStatus(`Timeout loading ${imageUrl}, using fallback`, 'error');
+            const fallbackTexture = createFallbackTexture();
+            resolve(fallbackTexture);
+          }, 10000); // 10 second timeout
+          
           image.onload = () => {
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-            
-            // Check if image dimensions are power of 2
-            const isPowerOf2 = (value) => (value & (value - 1)) === 0;
-            if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
-              gl.generateMipmap(gl.TEXTURE_2D);
-            } else {
-              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            clearTimeout(timeout);
+            try {
+              gl.bindTexture(gl.TEXTURE_2D, texture);
+              gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+              
+              // Check if image dimensions are power of 2
+              const isPowerOf2 = (value) => (value & (value - 1)) === 0;
+              if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
+                gl.generateMipmap(gl.TEXTURE_2D);
+              } else {
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+              }
+              
+              updateStatus(`Loaded: ${imageUrl}`, 'loaded');
+              resolve(texture);
+            } catch (error) {
+              clearTimeout(timeout);
+              updateStatus(`Error processing ${imageUrl}, using fallback`, 'error');
+              const fallbackTexture = createFallbackTexture();
+              resolve(fallbackTexture);
             }
-            
-            resolve(texture);
           };
           
           image.onerror = () => {
-            reject(new Error('Failed to load image'));
+            clearTimeout(timeout);
+            updateStatus(`Failed to load ${imageUrl}, using fallback`, 'error');
+            const fallbackTexture = createFallbackTexture();
+            resolve(fallbackTexture);
           };
           
+          // Try multiple approaches for loading
           image.crossOrigin = 'anonymous';
           image.src = imageUrl;
+          
+          // Also try without CORS as a fallback
+          setTimeout(() => {
+            if (!image.complete) {
+              const img2 = new Image();
+              img2.onload = () => {
+                clearTimeout(timeout);
+                try {
+                  gl.bindTexture(gl.TEXTURE_2D, texture);
+                  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img2);
+                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                  updateStatus(`Loaded: ${imageUrl} (no CORS)`, 'loaded');
+                  resolve(texture);
+                } catch (error) {
+                  const fallbackTexture = createFallbackTexture();
+                  resolve(fallbackTexture);
+                }
+              };
+              img2.src = imageUrl;
+            }
+          }, 2000);
         });
       }
 
@@ -295,10 +406,12 @@
       function handleImageSelection(event) {
         const selectedPath = event.target.value;
         currentImagePath = selectedPath;
+        isImageLoaded = false;
         
         // Load the new texture
         loadTexture(selectedPath).then(texture => {
           imageTexture = texture;
+          isImageLoaded = true;
           console.log('Image loaded successfully:', selectedPath);
           
           // If there's already a poster placed, update it with the new texture
@@ -309,7 +422,10 @@
           }
         }).catch(error => {
           console.error('Error loading image:', error);
-          alert('Error loading image: ' + selectedPath);
+          // Create fallback texture
+          imageTexture = createFallbackTexture();
+          isImageLoaded = true;
+          updateStatus('Using fallback pattern due to error', 'error');
         });
       }
 
@@ -454,13 +570,20 @@
           alert(`RefSpace Error: ${error.message}`);
         });
 
-        // Load default texture
-        loadTexture(currentImagePath).then(texture => {
-          imageTexture = texture;
-          console.log('Default image loaded successfully');
-        }).catch(error => {
-          console.error('Error loading default image:', error);
-        });
+        // Load default texture or create fallback immediately
+        if (!imageTexture) {
+          loadTexture(currentImagePath).then(texture => {
+            imageTexture = texture;
+            isImageLoaded = true;
+            console.log('Default image loaded successfully');
+          }).catch(error => {
+            console.error('Error loading default image:', error);
+            // Create fallback texture immediately
+            imageTexture = createFallbackTexture();
+            isImageLoaded = true;
+            updateStatus('Using fallback pattern', 'loaded');
+          });
+        }
 
         // Show guidance initially
         document.getElementById('guidance').style.display = 'block';
@@ -479,11 +602,23 @@
       }
 
       async function addARObjectAt(matrix) {
-        // Only place if no poster exists and we have a texture
-        if (currentPoster || !imageTexture) {
+        // Check if we have a texture ready
+        if (!imageTexture || !isImageLoaded) {
+          // If no texture, create fallback immediately
           if (!imageTexture) {
-            alert('Image is still loading, please wait...');
+            updateStatus('Creating fallback texture...', 'loading');
+            imageTexture = createFallbackTexture();
+            isImageLoaded = true;
+            updateStatus('Using fallback pattern', 'loaded');
+          } else {
+            // Still loading, wait a bit
+            updateStatus('Waiting for image...', 'loading');
+            return;
           }
+        }
+
+        // Only place if no poster exists
+        if (currentPoster) {
           return;
         }
 
@@ -514,7 +649,7 @@
         // Only place on walls
         if (surfaceType !== 'Wall') return;
 
-        // Create wall art node with uploaded texture
+        // Create wall art node with texture
         let wallArtNode = createWallArtNode(imageTexture);
         wallArtNode.visible = true;
 
@@ -538,6 +673,8 @@
         // Show controls, hide guidance
         document.getElementById('controls').style.display = 'block';
         document.getElementById('guidance').style.display = 'none';
+        
+        updateStatus('Wall art placed successfully!', 'loaded');
       }
 
       function onSelect(event) {
@@ -549,7 +686,6 @@
       function onXRFrame(t, frame) {
         let session = frame.session;
         let pose = frame.getViewerPose(xrRefSpace);
-        lastPose = pose;
 
         reticle.visible = false;
         document.getElementById('guidance').style.display = currentPoster ? 'none' : 'block';
@@ -584,7 +720,20 @@
         scene.endFrame();
       }
 
+      // Initialize everything
       initXR();
+      
+      // Pre-load fallback texture when WebGL is available
+      window.addEventListener('load', () => {
+        // This will be called when the WebGL context is ready
+        setTimeout(() => {
+          if (gl && !imageTexture) {
+            imageTexture = createFallbackTexture();
+            isImageLoaded = true;
+            updateStatus('Fallback pattern ready', 'loaded');
+          }
+        }, 1000);
+      });
     </script>
   </body>
 </html>
