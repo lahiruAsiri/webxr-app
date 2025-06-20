@@ -7,7 +7,6 @@
     <meta name='apple-mobile-web-app-capable' content='yes'>
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
-    <!-- Add Tailwind CSS via CDN for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body { margin: 0; }
@@ -32,18 +31,16 @@
       <details open>
         <summary>Hit Test</summary>
         <p>
-          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Z axis) to adjust. Click "Remove Poster" to place a new one.
+          Point at a wall to see the blue reticle, then tap to place a poster with an image. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Z axis) to adjust. Click "Remove Poster" to place a new one.
           <a class="back" href="./">Back</a>
         </p>
       </details>
     </header>
     <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
     <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
-      <!-- Minimize/Maximize toggle button -->
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
       </button>
-      <!-- Controls panel -->
       <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
         <div class="space-y-4">
@@ -69,7 +66,7 @@
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Y Rotation:</label>
-            <input type="range" id="rotY" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
+            <input type="range" id="rotY" min="-180" max="180" step="1" value="90" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
@@ -112,6 +109,79 @@
       wallArt.onError = (error) => console.error('Error loading WallArt.glb:', error);
       arObject.addNode(wallArt);
 
+      // New: Textured plane for image
+      class TexturedPlaneNode extends Node {
+        constructor(imageUrl) {
+          super();
+          this.imageUrl = imageUrl;
+          this.texture = null;
+          this.geometry = null;
+          this.init();
+        }
+
+        init() {
+          // Define quad geometry (1x1 unit square centered at origin)
+          this.geometry = {
+            vertices: new Float32Array([
+              -0.5, -0.5, 0, // Bottom-left
+               0.5, -0.5, 0, // Bottom-right
+               0.5,  0.5, 0, // Top-right
+              -0.5,  0.5, 0  // Top-left
+            ]),
+            indices: new Uint16Array([
+              0, 1, 2, // First triangle
+              2, 3, 0  // Second triangle
+            ]),
+            uvs: new Float32Array([
+              0, 0, // Bottom-left
+              1, 0, // Bottom-right
+              1, 1, // Top-right
+              0, 1  // Top-left
+            ]),
+            normals: new Float32Array([
+              0, 0, 1,
+              0, 0, 1,
+              0, 0, 1,
+              0, 0, 1
+            ])
+          };
+
+          // Load image texture
+          const img = new Image();
+          img.onload = () => {
+            this.texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, this.texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            console.log('Image texture loaded:', this.imageUrl);
+          };
+          img.onerror = () => console.error('Error loading image:', this.imageUrl);
+          img.src = this.imageUrl;
+
+          // Position plane slightly in front of wallArt (local z = 0.01)
+          mat4.translate(this.matrix, this.matrix, [0, 0, 0.01]);
+          // Scale to match wallArt (adjust based on model dimensions)
+          vec3.set(this.scale, 0.5, 0.5, 1); // Assume wallArt is 0.5x0.5 units
+        }
+
+        render() {
+          if (!this.texture || !this.geometry) return;
+
+          // TODO: Implement WebGL rendering (bind buffers, set texture, draw)
+          // This depends on your renderer's API. Placeholder:
+          // gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+          // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+          // gl.bindTexture(gl.TEXTURE_2D, this.texture);
+          // gl.drawElements(gl.TRIANGLES, this.geometry.indices.length, gl.UNSIGNED_SHORT, 0);
+        }
+      }
+
+      let imagePlane = new TexturedPlaneNode('media/images/poster.jpg');
+      arObject.addNode(imagePlane);
+
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
       scene.addNode(reticle);
@@ -126,8 +196,8 @@
         posX: 0,
         posY: 0,
         posZ: 0,
-        rotX: 90,
-        rotY: 0,
+        rotX: 0,
+        rotY: 90, // Match y-rotation in addARObjectAt
         rotZ: 0
       };
 
@@ -149,16 +219,13 @@
         mat4.getTranslation(position, matrix);
         mat4.getRotation(rotation, matrix);
 
-        // Apply position offsets
         let offset = vec3.fromValues(controls.posX, controls.posY, controls.posZ);
         vec3.add(position, position, offset);
 
-        // Apply user rotations
         let userRotation = quat.create();
         quat.fromEuler(userRotation, controls.rotX, controls.rotY, controls.rotZ);
         quat.multiply(rotation, rotation, userRotation);
 
-        // Apply scale
         let scaleMatrix = mat4.create();
         mat4.fromScaling(scaleMatrix, [controls.scale, controls.scale, controls.scale]);
         let transformMatrix = mat4.create();
@@ -167,7 +234,6 @@
 
         currentPoster.matrix = transformMatrix;
 
-        // Update sliders
         document.getElementById('scale').value = controls.scale;
         document.getElementById('posX').value = controls.posX;
         document.getElementById('posY').value = controls.posY;
@@ -177,22 +243,18 @@
         document.getElementById('rotZ').value = controls.rotZ;
       }
 
-      // Raycasting to check if touch hits the poster
       function rayIntersectsPoster(touchX, touchY, canvas, pose) {
         if (!currentPoster || !pose) return false;
 
-        // Convert touch to normalized device coordinates (-1 to 1)
         const rect = canvas.getBoundingClientRect();
         const ndcX = (2.0 * touchX - rect.width) / rect.width;
         const ndcY = (rect.height - 2.0 * touchY) / rect.height;
 
-        // Get projection and view matrices
         const projectionMatrix = mat4.create();
-        const fov = 60 * Math.PI / 180; // Assume 60° FOV
+        const fov = 60 * Math.PI / 180;
         mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
         const viewMatrix = pose.views[0].transform.inverse.matrix;
 
-        // Create ray in world space
         const rayOrigin = vec3.create();
         const rayEnd = vec3.fromValues(ndcX, ndcY, -1);
         const rayOriginView = vec3.fromValues(ndcX, ndcY, -1);
@@ -206,13 +268,11 @@
         vec3.subtract(rayDirection, rayEnd, rayOrigin);
         vec3.normalize(rayDirection, rayDirection);
 
-        // Get poster’s world position
         const posterMatrix = currentPoster.matrix;
         const posterPosition = vec3.create();
         mat4.getTranslation(posterPosition, posterMatrix);
 
-        // Approximate poster as a sphere (radius based on scale)
-        const radius = controls.scale * 0.25; // Assume WallArt.glb is ~0.5m wide
+        const radius = controls.scale * 0.25;
         const ray = new Ray(rayOrigin, rayDirection);
         const toPoster = vec3.create();
         vec3.subtract(toPoster, posterPosition, rayOrigin);
@@ -241,7 +301,6 @@
             });
         }
 
-        // Setup control listeners
         document.getElementById('scale').addEventListener('input', (e) => {
           controls.scale = parseFloat(e.target.value);
           updatePosterTransform();
@@ -276,13 +335,11 @@
             currentPoster = null;
             document.getElementById('controls').style.display = 'none';
             document.getElementById('guidance').style.display = 'block';
-            // Reset controls
-            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
+            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 90, rotZ: 0 };
             updatePosterTransform();
           }
         });
 
-        // Setup minimize/maximize toggle
         document.getElementById('toggleControls').addEventListener('click', () => {
           const controlsPanel = document.getElementById('controlsPanel');
           const toggleIcon = document.getElementById('toggleIcon');
@@ -295,7 +352,6 @@
           }
         });
 
-        // Setup touch controls on canvas
         const canvas = document.querySelector('canvas');
         if (canvas) {
           canvas.addEventListener('touchstart', (e) => {
@@ -324,8 +380,8 @@
               const touchY = e.touches[0].clientY;
               const deltaX = touchX - lastTouchX;
               const deltaY = touchY - lastTouchY;
-              controls.rotY += deltaX * 0.5; // Horizontal drag -> Y rotation
-              controls.rotX += deltaY * 0.5; // Vertical drag -> X rotation
+              controls.rotY += deltaX * 0.5;
+              controls.rotX += deltaY * 0.5;
               lastTouchX = touchX;
               lastTouchY = touchY;
               updatePosterTransform();
@@ -334,10 +390,8 @@
               const dy = e.touches[1].clientY - e.touches[0].clientY;
               const currentDistance = Math.sqrt(dx * dx + dy * dy);
               const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-              // Adjust scale based on pinch distance
               const scaleChange = currentDistance / initialPinchDistance;
               controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
-              // Adjust Z rotation based on angle
               controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
               initialPinchDistance = currentDistance;
               initialPinchAngle = currentAngle;
@@ -413,7 +467,6 @@
           alert(`RefSpace Error: ${error.message}`);
         });
 
-        // Show guidance initially
         document.getElementById('guidance').style.display = 'block';
       }
 
@@ -428,7 +481,6 @@
       }
 
       function addARObjectAt(matrix) {
-        // Only place if no poster exists
         if (currentPoster) return;
 
         let hitMatrix = mat4.clone(matrix);
@@ -455,7 +507,6 @@
           surfaceType = 'Wall';
         }
 
-        // Only place on walls
         if (surfaceType !== 'Wall') return;
 
         let modelZ = vec3.fromValues(0, 0, -1);
@@ -468,9 +519,8 @@
         mat4.fromRotationTranslation(finalMatrix, rotation, position);
         mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
-           // Apply 90-degree y-rotation
         let yRotationQuat = quat.create();
-        quat.fromEuler(yRotationQuat, 0, 90, 0); // 90 degrees around y-axis
+        quat.fromEuler(yRotationQuat, 0, 90, 0);
         let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
         mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
 
@@ -479,11 +529,9 @@
         currentPoster = newObject;
         baseMatrix = mat4.clone(finalMatrix);
 
-        // Apply current controls (with rotY initialized to 90)
         updatePosterTransform();
         scene.addNode(newObject);
 
-        // Show controls, hide guidance
         document.getElementById('controls').style.display = 'block';
         document.getElementById('guidance').style.display = 'none';
       }
