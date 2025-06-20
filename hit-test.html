@@ -7,7 +7,6 @@
     <meta name='apple-mobile-web-app-capable' content='yes'>
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
-    <!-- Add Tailwind CSS via CDN for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body { margin: 0; }
@@ -62,12 +61,10 @@
       </details>
     </header>
     
-    <!-- Loading Status -->
     <div id="loadingStatus">
       <div id="statusText" class="loading">Loading default image...</div>
     </div>
     
-    <!-- Image Selection Section -->
     <div id="imageSelection">
       <select id="imageSelect" class="mb-2 p-2 border rounded">
         <option value="media/images/wallart1.png">Wall Art 1</option>
@@ -81,11 +78,9 @@
     
     <div id="guidance">Point at a wall to see the blue reticle and place your custom wall art.</div>
     <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
-      <!-- Minimize/Maximize toggle button -->
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
       </button>
-      <!-- Controls panel -->
       <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Wall Art Controls</h3>
         <div class="space-y-4">
@@ -122,6 +117,7 @@
       import {Node} from './js/render/core/node.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
+      import {Ray} from './js/render/math/ray.js';
       import {Material, RENDER_ORDER} from './js/render/core/material.js';
       import {Primitive} from './js/render/core/primitive.js';
 
@@ -139,13 +135,11 @@
 
       // Image texture globals
       let imageTexture = null;
-      let currentImagePath = 'media/images/wallart1.png'; // Default image
+      let currentImagePath = 'media/images/wallart1.png';
       let isImageLoaded = false;
 
       // Reticle for hit testing
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
-      reticle.onLoad = () => console.log('Reticle GLTF loaded');
-      reticle.onError = (error) => console.error('Reticle GLTF error:', error);
       reticle.visible = false;
       scene.addNode(reticle);
 
@@ -162,31 +156,13 @@
         rotZ: 0
       };
 
-      // Status update function
       function updateStatus(message, className = 'loading') {
         const statusText = document.getElementById('statusText');
         statusText.textContent = message;
         statusText.className = className;
-        if (className === 'error') {
-          const alertDiv = document.createElement('div');
-          alertDiv.style.cssText = `
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(255, 0, 0, 0.9); color: white; padding: 10px 20px;
-            border-radius: 5px; z-index: 1002; font-family: Arial, sans-serif;
-          `;
-          alertDiv.textContent = message;
-          document.body.appendChild(alertDiv);
-          setTimeout(() => alertDiv.remove(), 3000);
-        }
       }
 
-      // Create a fallback texture with a simple pattern
       function createFallbackTexture() {
-        if (!gl) {
-          console.error('WebGL context not available for fallback texture');
-          updateStatus('WebGL context error', 'error');
-          return null;
-        }
         const canvas = document.createElement('canvas');
         canvas.width = 256;
         canvas.height = 256;
@@ -217,17 +193,9 @@
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         
-        const error = gl.getError();
-        if (error !== gl.NO_ERROR) {
-          console.error('WebGL error creating fallback texture:', error);
-          updateStatus('WebGL texture error', 'error');
-          return null;
-        }
-        
         return texture;
       }
 
-      // Create a plane geometry for the wall art
       function createWallArtGeometry() {
         const vertices = new Float32Array([
           -0.5, -0.5, 0.0,
@@ -254,23 +222,15 @@
           0, 1, 2, 0, 2, 3
         ]);
 
-        return { vertices, normals, texCoords, indices };
+        return {
+          vertices,
+          normals,
+          texCoords,
+          indices
+        };
       }
 
-      // Create wall art node with custom PNG
       function createWallArtNode(texture) {
-        if (!gl) {
-          console.error('WebGL context not available');
-          updateStatus('WebGL context error', 'error');
-          return null;
-        }
-        if (!texture) {
-          console.error('No valid texture provided');
-          updateStatus('Texture error', 'error');
-          return null;
-        }
-
-        console.log('Creating wall art node with texture:', texture);
         const geometry = createWallArtGeometry();
         
         const vertexBuffer = gl.createBuffer();
@@ -302,20 +262,11 @@
 
         const node = new Node();
         node.addRenderPrimitive(primitive);
-        console.log('Wall art node created:', node);
         return node;
       }
 
-      // Load texture from image with better error handling
       function loadTexture(imageUrl) {
         return new Promise((resolve, reject) => {
-          if (!gl) {
-            console.error('WebGL context not initialized');
-            updateStatus('WebGL context error, using fallback', 'error');
-            resolve(createFallbackTexture());
-            return;
-          }
-
           updateStatus(`Loading ${imageUrl}...`, 'loading');
           
           if (imageUrl === 'fallback') {
@@ -331,23 +282,19 @@
           const image = new Image();
           
           const timeout = setTimeout(() => {
-            console.warn(`Timeout loading ${imageUrl} after 15s`);
             updateStatus(`Timeout loading ${imageUrl}, using fallback`, 'error');
-            resolve(createFallbackTexture());
-          }, 15000);
+            const fallbackTexture = createFallbackTexture();
+            resolve(fallbackTexture);
+          }, 10000);
           
           image.onload = () => {
             clearTimeout(timeout);
             try {
               gl.bindTexture(gl.TEXTURE_2D, texture);
               gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-              const error = gl.getError();
-              if (error !== gl.NO_ERROR) {
-                throw new Error(`WebGL error ${error} while loading texture`);
-              }
               
-              const isPowerOf2 = (value) => (value & (value - 1)) === 0;
-              if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
+              if ((image.width & (image.width - 1)) === 0 && 
+                  (image.height & (image.height - 1)) === 0) {
                 gl.generateMipmap(gl.TEXTURE_2D);
               } else {
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -358,17 +305,18 @@
               updateStatus(`Loaded: ${imageUrl}`, 'loaded');
               resolve(texture);
             } catch (error) {
-              console.error(`Texture processing error for ${imageUrl}:`, error);
+              clearTimeout(timeout);
               updateStatus(`Error processing ${imageUrl}, using fallback`, 'error');
-              resolve(createFallbackTexture());
+              const fallbackTexture = createFallbackTexture();
+              resolve(fallbackTexture);
             }
           };
           
           image.onerror = () => {
             clearTimeout(timeout);
-            console.error(`Failed to load image: ${imageUrl}`);
             updateStatus(`Failed to load ${imageUrl}, using fallback`, 'error');
-            resolve(createFallbackTexture());
+            const fallbackTexture = createFallbackTexture();
+            resolve(fallbackTexture);
           };
           
           image.crossOrigin = 'anonymous';
@@ -376,7 +324,6 @@
           
           setTimeout(() => {
             if (!image.complete) {
-              console.log(`Retrying ${imageUrl} without CORS`);
               const img2 = new Image();
               img2.onload = () => {
                 clearTimeout(timeout);
@@ -389,13 +336,9 @@
                   updateStatus(`Loaded: ${imageUrl} (no CORS)`, 'loaded');
                   resolve(texture);
                 } catch (error) {
-                  console.error(`Non-CORS load error for ${imageUrl}:`, error);
-                  resolve(createFallbackTexture());
+                  const fallbackTexture = createFallbackTexture();
+                  resolve(fallbackTexture);
                 }
-              };
-              img2.onerror = () => {
-                console.error(`Non-CORS load failed for ${imageUrl}`);
-                resolve(createFallbackTexture());
               };
               img2.src = imageUrl;
             }
@@ -404,25 +347,24 @@
       }
 
       function updatePosterTransform() {
-        if (!currentPoster) {
-          console.log('No poster to transform');
-          return;
-        }
+        if (!currentPoster) return;
 
-        console.log('Updating poster transform with controls:', controls);
         let matrix = mat4.clone(baseMatrix);
         let position = vec3.create();
         let rotation = quat.create();
         mat4.getTranslation(position, matrix);
         mat4.getRotation(rotation, matrix);
 
+        // Apply position offsets
         let offset = vec3.fromValues(controls.posX, controls.posY, controls.posZ);
         vec3.add(position, position, offset);
 
+        // Apply Z rotation
         let zRotation = quat.create();
         quat.fromEuler(zRotation, 0, 0, controls.rotZ);
         quat.multiply(rotation, rotation, zRotation);
 
+        // Apply scale
         let scaleMatrix = mat4.create();
         mat4.fromScaling(scaleMatrix, [controls.scale, controls.scale, controls.scale]);
         let transformMatrix = mat4.create();
@@ -430,29 +372,26 @@
         mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
 
         currentPoster.matrix = transformMatrix;
-        console.log('Poster matrix updated:', transformMatrix);
 
+        // Update sliders
         document.getElementById('scale').value = controls.scale;
         document.getElementById('posX').value = controls.posX;
         document.getElementById('posY').value = controls.posY;
         document.getElementById('posZ').value = controls.posZ;
-_character_0_document.getElementById('rotZ').value = controls.rotZ;
+        document.getElementById('rotZ').value = controls.rotZ;
       }
 
-      // Handle image selection
       function handleImageSelection(event) {
         const selectedPath = event.target.value;
         currentImagePath = selectedPath;
         isImageLoaded = false;
         
-        console.log('Selected image:', selectedPath);
         loadTexture(selectedPath).then(texture => {
           imageTexture = texture;
           isImageLoaded = true;
           console.log('Image loaded successfully:', selectedPath);
           
           if (currentPoster) {
-            console.log('Updating existing poster with new texture');
             scene.removeNode(currentPoster);
             createWallArtAtCurrentPosition();
           }
@@ -464,24 +403,15 @@ _character_0_document.getElementById('rotZ').value = controls.rotZ;
         });
       }
 
-      // Create wall art at current position (for texture updates)
       function createWallArtAtCurrentPosition() {
-        if (!imageTexture || !baseMatrix) {
-          console.error('Cannot create wall art: missing texture or baseMatrix');
-          return;
-        }
+        if (!imageTexture || !baseMatrix) return;
         
         let wallArtNode = createWallArtNode(imageTexture);
-        if (!wallArtNode) {
-          console.error('Failed to create wall art node');
-          return;
-        }
         wallArtNode.visible = true;
         currentPoster = wallArtNode;
         
         updatePosterTransform();
         scene.addNode(wallArtNode);
-        console.log('Wall art node added for texture update');
       }
 
       function initXR() {
@@ -498,13 +428,7 @@ _character_0_document.getElementById('rotZ').value = controls.rotZ;
           navigator.xr.isSessionSupported('immersive-ar')
             .then((supported) => {
               xrButton.enabled = supported;
-              console.log('Immersive AR supported:', supported);
-            }).catch(error => {
-              console.error('Error checking AR support:', error);
             });
-        } else {
-          console.error('WebXR not supported');
-          updateStatus('WebXR not supported', 'error');
         }
 
         document.getElementById('imageSelect').addEventListener('change', handleImageSelection);
@@ -537,7 +461,6 @@ _character_0_document.getElementById('rotZ').value = controls.rotZ;
             document.getElementById('guidance').style.display = 'block';
             controls = { scale: 1.0, posX: 0, posY: 0, posZ: 0.01, rotZ: 0 };
             updatePosterTransform();
-            console.log('Poster removed');
           }
         });
 
@@ -552,33 +475,18 @@ _character_0_document.getElementById('rotZ').value = controls.rotZ;
             toggleIcon.textContent = '+';
           }
         });
-
-        // Preload default texture
-        loadTexture(currentImagePath).then(texture => {
-          imageTexture = texture;
-          isImageLoaded = true;
-          console.log('Preloaded default image:', currentImagePath);
-        }).catch(error => {
-          console.error('Preload error:', error);
-          imageTexture = createFallbackTexture();
-          isImageLoaded = true;
-          updateStatus('Using fallback pattern', 'loaded');
-        });
       }
 
       function onRequestSession() {
-        console.log('Requesting AR session');
         return navigator.xr.requestSession('immersive-ar', {
           requiredFeatures: ['local', 'dom-overlay'],
           optionalFeatures: ['hit-test'],
           domOverlay: { root: document.body }
         }).then((session) => {
-          console.log('AR session started');
           xrButton.setSession(session);
           onSessionStarted(session);
         }).catch((error) => {
-          console.error('AR session error:', error);
-          updateStatus(`AR Session Error: ${error.message}`, 'error');
+          alert(`AR Session Error: ${error.message}`);
         });
       }
 
@@ -593,14 +501,14 @@ _character_0_document.getElementById('rotZ').value = controls.rotZ;
               alpha: true
             });
             if (!gl) {
-              throw new Error('Failed to create WebGL context');
+              alert('Error: Failed to create WebGL context');
+              session.end();
+              return;
             }
             renderer = new Renderer(gl);
             scene.setRenderer(renderer);
-            console.log('WebGL context initialized');
           } catch (error) {
-            console.error('WebGL error:', error);
-            updateStatus(`WebGL Error: ${error.message}`, 'error');
+            alert(`WebGL Error: ${error.message}`);
             session.end();
             return;
           }
@@ -608,10 +516,8 @@ _character_0_document.getElementById('rotZ').value = controls.rotZ;
 
         try {
           session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
-          console.log('XRWebGLLayer initialized');
         } catch (error) {
-          console.error('XRWebGLLayer error:', error);
-          updateStatus(`XRWebGLLayer Error: ${error.message}`, 'error');
+          alert(`XRWebGLLayer Error: ${error.message}`);
           session.end();
           return;
         }
@@ -620,21 +526,30 @@ _character_0_document.getElementById('rotZ').value = controls.rotZ;
           xrViewerSpace = refSpace;
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
             xrHitTestSource = hitTestSource;
-            console.log('Hit test source initialized');
           }).catch((error) => {
-            console.warn('HitTest initialization failed:', error);
-            updateStatus('Hit test not supported', 'error');
+            console.warn(`HitTest Error: ${error.message}`);
           });
         });
 
         session.requestReferenceSpace('local').then((refSpace) => {
           xrRefSpace = refSpace;
           session.requestAnimationFrame(onXRFrame);
-          console.log('Local reference space initialized');
         }).catch((error) => {
-          console.error('RefSpace error:', error);
-          updateStatus(`RefSpace Error: ${error.message}`, 'error');
+          alert(`RefSpace Error: ${error.message}`);
         });
+
+        if (!imageTexture) {
+          loadTexture(currentImagePath).then(texture => {
+            imageTexture = texture;
+            isImageLoaded = true;
+            console.log('Default image loaded successfully');
+          }).catch(error => {
+            console.error('Error loading default image:', error);
+            imageTexture = createFallbackTexture();
+            isImageLoaded = true;
+            updateStatus('Using fallback pattern', 'loaded');
+          });
+        }
 
         document.getElementById('guidance').style.display = 'block';
       }
@@ -645,78 +560,54 @@ _character_0_document.getElementById('rotZ').value = controls.rotZ;
           xrHitTestSource = null;
         }
         session.end();
-        console.log('AR session ended');
       }
 
       function onSessionEnded(event) {
         xrButton.setSession(null);
-        console.log('Session ended event');
       }
 
       async function addARObjectAt(matrix) {
-        if (!imageTexture || !isImageLoaded) {
-          console.warn('No valid texture, using fallback');
+        console.log('Attempting to place object...');
+        
+        // Ensure we have a texture
+        if (!imageTexture) {
+          console.log('Creating fallback texture');
           imageTexture = createFallbackTexture();
           isImageLoaded = true;
-          updateStatus('Using fallback pattern', 'loaded');
         }
-
+        
+        // Don't place if we already have a poster
         if (currentPoster) {
-          console.log('Poster already exists, skipping placement');
+          console.log('Poster already exists');
           return;
         }
-
-        let hitMatrix = mat4.clone(matrix);
-        let position = vec3.create();
-        let rotation = quat.create();
-        mat4.getTranslation(position, hitMatrix);
-        mat4.getRotation(rotation, hitMatrix);
-        console.log('Placing poster at position:', position);
-
-        let upVector = vec3.fromValues(0, 1, 0);
-        vec3.transformQuat(upVector, upVector, rotation);
-        vec3.normalize(upVector, upVector);
-
-        let surfaceNormal = vec3.create();
-        let surfaceType = Math.abs(upVector[1]) > 0.5 ? 'Floor' : 'Wall';
-        console.log('Surface type:', surfaceType, 'Up vector Y:', upVector[1]);
-
-        if (surfaceType !== 'Wall') {
-          console.log('Not a wall, skipping placement');
-          updateStatus('Please point at a wall', 'error');
-          return;
-        }
-
+        
+        // Create the wall art node
         let wallArtNode = createWallArtNode(imageTexture);
-        if (!wallArtNode) {
-          console.error('Failed to create wall art node');
-          updateStatus('Failed to create wall art', 'error');
-          return;
-        }
         wallArtNode.visible = true;
-
-        // Simplified transformation for testing
-        let finalMatrix = mat4.clone(hitMatrix);
-        baseMatrix = mat4.clone(finalMatrix);
         currentPoster = wallArtNode;
-
+        baseMatrix = mat4.clone(matrix);
+        
+        // Apply default scale (make it bigger)
+        controls.scale = 0.5;
         updatePosterTransform();
+        
         scene.addNode(wallArtNode);
-        console.log('Wall art node added to scene at:', finalMatrix);
-
+        console.log('Poster placed successfully');
+        
+        // Update UI
         document.getElementById('controls').style.display = 'block';
         document.getElementById('guidance').style.display = 'none';
-        updateStatus('Wall art placed successfully!', 'loaded');
+        updateStatus('Wall art placed!', 'loaded');
       }
 
       function onSelect(event) {
-        console.log('Select event triggered:', event);
+        console.log('Select event triggered');
         if (reticle.visible) {
-          console.log('Reticle visible, attempting to place poster');
+          console.log('Placing poster at reticle position');
           addARObjectAt(reticle.matrix);
         } else {
-          console.log('Reticle not visible, cannot place poster');
-          updateStatus('Point at a wall to place art', 'error');
+          console.log('Cannot place - reticle not visible');
         }
       }
 
@@ -729,7 +620,6 @@ _character_0_document.getElementById('rotZ').value = controls.rotZ;
 
         if (xrHitTestSource && pose && !currentPoster) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
-          console.log('Hit test results:', hitTestResults.length);
           if (hitTestResults.length > 0) {
             let hitPose = hitTestResults[0].getPose(xrRefSpace);
             let hitMatrix = hitPose.transform.matrix;
@@ -737,19 +627,17 @@ _character_0_document.getElementById('rotZ').value = controls.rotZ;
             let rotation = quat.create();
             mat4.getTranslation(position, hitMatrix);
             mat4.getRotation(rotation, hitMatrix);
-            console.log('Hit position:', position);
 
             let upVector = vec3.fromValues(0, 1, 0);
             vec3.transformQuat(upVector, upVector, rotation);
             vec3.normalize(upVector, upVector);
-            let surfaceType = Math.abs(upVector[1]) > 0.5 ? 'Floor' : 'Wall';
-            console.log('Surface type:', surfaceType, 'Up vector Y:', upVector[1]);
+
+            let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
 
             if (surfaceType === 'Wall') {
               reticle.visible = true;
               reticle.matrix = hitMatrix;
               document.getElementById('guidance').style.display = 'none';
-              console.log('Reticle shown at:', position);
             }
           }
         }
