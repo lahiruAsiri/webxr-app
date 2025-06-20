@@ -7,6 +7,7 @@
     <meta name='apple-mobile-web-app-capable' content='yes'>
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
+    <!-- Add Tailwind CSS via CDN for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body { margin: 0; }
@@ -23,57 +24,68 @@
         font-family: Arial, sans-serif;
         display: none;
       }
+      #imageUpload {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        z-index: 1001;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 10px;
+        border-radius: 5px;
+        backdrop-filter: blur(5px);
+      }
     </style>
-    <title>Hit Test</title>
+    <title>PNG Wall Art AR</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>Hit Test</summary>
+        <summary>PNG Wall Art AR</summary>
         <p>
-          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster to adjust. Click "Remove Poster" to place a new one.
+          Upload your PNG image, then point at a wall to see the blue reticle and tap to place your custom wall art. Use controls to adjust size and position.
           <a class="back" href="./">Back</a>
         </p>
       </details>
     </header>
-    <div id="guidance">Point at a wall to see the blue reticle and tap to place the poster.</div>
+    
+    <!-- Image Upload Section -->
+    <div id="imageUpload">
+      <input type="file" id="imageInput" accept="image/png,image/jpg,image/jpeg" class="mb-2">
+      <div class="text-sm text-gray-600">Upload your wall art image</div>
+    </div>
+    
+    <div id="guidance">Point at a wall to see the blue reticle and place your custom wall art.</div>
     <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
+      <!-- Minimize/Maximize toggle button -->
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
       </button>
+      <!-- Controls panel -->
       <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
-        <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Wall Art Controls</h3>
         <div class="space-y-4">
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Size:</label>
-            <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-blue-600">
+            <input type="range" id="scale" min="0.1" max="3.0" step="0.1" value="1.0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">X Position:</label>
-            <input type="range" id="posX" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+            <input type="range" id="posX" min="-1.0" max="1.0" step="0.01" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Y Position:</label>
-            <input type="range" id="posY" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+            <input type="range" id="posY" min="-1.0" max="1.0" step="0.01" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Z Position:</label>
-            <input type="range" id="posZ" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+            <input type="range" id="posZ" min="-0.5" max="0.5" step="0.01" value="0.01" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">X Rotation:</label>
-            <input type="range" id="rotX" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
-          </div>
-          <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Y Rotation:</label>
-            <input type="range" id="rotY" min="-180" max="180" step="1" value="90" class="w-full accent-blue-600">
-          </div>
-          <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
+            <label class="w-20 text-sm text-gray-600">Rotation:</label>
             <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
           <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
-            Remove Poster
+            Remove Wall Art
           </button>
         </div>
       </div>
@@ -86,6 +98,8 @@
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
       import {Ray} from './js/render/math/ray.js';
+      import {Material, RENDER_ORDER} from './js/render/core/material.js';
+      import {Primitive} from './js/render/core/primitive.js';
 
       // XR globals
       let xrButton = null;
@@ -99,10 +113,13 @@
       let scene = new Scene();
       scene.enableStats(false);
 
+      // Image texture globals
+      let imageTexture = null;
+      let defaultImageUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='; // 1x1 transparent pixel
+
+      // Reticle for hit testing
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
-      reticle.onLoad = () => alert('Reticle loaded successfully');
-      reticle.onError = (error) => alert('Error loading reticle: ' + error.message);
       scene.addNode(reticle);
 
       scene.clear = false;
@@ -111,35 +128,12 @@
       let currentPoster = null;
       let baseMatrix = mat4.create();
       let controls = {
-        scale: 0.5,
+        scale: 1.0,
         posX: 0,
         posY: 0,
-        posZ: 0,
-        rotX: 0,
-        rotY: 90,
+        posZ: 0.01,
         rotZ: 0
       };
-
-      // Track loading status
-      let wallArtLoaded = false;
-      let imagePlaneLoaded = false;
-
-      let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
-      wallArt.onLoad = () => {
-        wallArtLoaded = true;
-        alert('WallArt.glb loaded successfully');
-      };
-      wallArt.onError = (error) => alert('Error loading WallArt.glb: ' + error.message);
-      vec3.set(wallArt.scale, 0.5, 0.5, 0.5);
-
-      let imagePlane = new Gltf2Node({url: 'media/gltf/imagePlane/imagePlane.gltf'});
-      imagePlane.onLoad = () => {
-        imagePlaneLoaded = true;
-        alert('imagePlane.gltf loaded successfully');
-      };
-      imagePlane.onError = (error) => alert('Error loading imagePlane.gltf: ' + error.message);
-      mat4.translate(imagePlane.matrix, imagePlane.matrix, [0, 0, 0.02]);
-      vec3.set(imagePlane.scale, 0.48, 0.48, 1);
 
       // Touch control variables
       let isDragging = false;
@@ -150,6 +144,113 @@
       let initialPinchDistance = 0;
       let lastPose = null;
 
+      // Create a plane geometry for the wall art
+      function createWallArtGeometry() {
+        const vertices = new Float32Array([
+          -0.5, -0.5, 0.0,  // Bottom left
+           0.5, -0.5, 0.0,  // Bottom right
+           0.5,  0.5, 0.0,  // Top right
+          -0.5,  0.5, 0.0   // Top left
+        ]);
+
+        const normals = new Float32Array([
+          0.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          0.0, 0.0, 1.0
+        ]);
+
+        const texCoords = new Float32Array([
+          0.0, 1.0,  // Bottom left
+          1.0, 1.0,  // Bottom right
+          1.0, 0.0,  // Top right
+          0.0, 0.0   // Top left
+        ]);
+
+        const indices = new Uint16Array([
+          0, 1, 2,  0, 2, 3
+        ]);
+
+        return {
+          vertices,
+          normals,
+          texCoords,
+          indices
+        };
+      }
+
+      // Create wall art node with custom PNG
+      function createWallArtNode(texture) {
+        const geometry = createWallArtGeometry();
+        
+        // Create buffers
+        const vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, geometry.vertices, gl.STATIC_DRAW);
+
+        const normalBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, geometry.normals, gl.STATIC_DRAW);
+
+        const texCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, geometry.texCoords, gl.STATIC_DRAW);
+
+        const indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, geometry.indices, gl.STATIC_DRAW);
+
+        // Create material with the texture
+        const material = new Material();
+        material.baseColorTexture = texture;
+        material.transparent = true;
+        material.renderOrder = RENDER_ORDER.TRANSPARENT;
+
+        // Create primitive
+        const primitive = new Primitive({
+          POSITION: vertexBuffer,
+          NORMAL: normalBuffer,
+          TEXCOORD_0: texCoordBuffer
+        }, indexBuffer, material, gl.TRIANGLES);
+
+        // Create and return node
+        const node = new Node();
+        node.addRenderPrimitive(primitive);
+        return node;
+      }
+
+      // Load texture from image
+      function loadTexture(imageUrl) {
+        return new Promise((resolve, reject) => {
+          const texture = gl.createTexture();
+          const image = new Image();
+          
+          image.onload = () => {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+            
+            // Check if image dimensions are power of 2
+            const isPowerOf2 = (value) => (value & (value - 1)) === 0;
+            if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
+              gl.generateMipmap(gl.TEXTURE_2D);
+            } else {
+              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            }
+            
+            resolve(texture);
+          };
+          
+          image.onerror = () => {
+            reject(new Error('Failed to load image'));
+          };
+          
+          image.crossOrigin = 'anonymous';
+          image.src = imageUrl;
+        });
+      }
+
       function updatePosterTransform() {
         if (!currentPoster) return;
 
@@ -159,13 +260,16 @@
         mat4.getTranslation(position, matrix);
         mat4.getRotation(rotation, matrix);
 
+        // Apply position offsets
         let offset = vec3.fromValues(controls.posX, controls.posY, controls.posZ);
         vec3.add(position, position, offset);
 
-        let userRotation = quat.create();
-        quat.fromEuler(userRotation, controls.rotX, controls.rotY, controls.rotZ);
-        quat.multiply(rotation, rotation, userRotation);
+        // Apply Z rotation
+        let zRotation = quat.create();
+        quat.fromEuler(zRotation, 0, 0, controls.rotZ);
+        quat.multiply(rotation, rotation, zRotation);
 
+        // Apply scale
         let scaleMatrix = mat4.create();
         mat4.fromScaling(scaleMatrix, [controls.scale, controls.scale, controls.scale]);
         let transformMatrix = mat4.create();
@@ -173,56 +277,31 @@
         mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
 
         currentPoster.matrix = transformMatrix;
-        currentPoster.visible = true;
 
+        // Update sliders
         document.getElementById('scale').value = controls.scale;
         document.getElementById('posX').value = controls.posX;
         document.getElementById('posY').value = controls.posY;
         document.getElementById('posZ').value = controls.posZ;
-        document.getElementById('rotX').value = controls.rotX;
-        document.getElementById('rotY').value = controls.rotY;
         document.getElementById('rotZ').value = controls.rotZ;
       }
 
-      function rayIntersectsPoster(touchX, touchY, canvas, pose) {
-        if (!currentPoster || !pose) return false;
-
-        const rect = canvas.getBoundingClientRect();
-        const ndcX = (2.0 * touchX - rect.width) / rect.width;
-        const ndcY = (rect.height - 2.0 * touchY) / rect.height;
-
-        const projectionMatrix = mat4.create();
-        const fov = 60 * Math.PI / 180;
-        mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
-        const viewMatrix = pose.views[0].transform.inverse.matrix;
-
-        const rayOrigin = vec3.create();
-        const rayEnd = vec3.fromValues(ndcX, ndcY, -1);
-        const rayOriginView = vec3.fromValues(ndcX, ndcY, -1);
-        const rayEndView = vec3.fromValues(ndcX, ndcY, 1);
-        mat4.invert(projectionMatrix, projectionMatrix);
-        vec3.transformMat4(rayOriginView, rayOriginView, projectionMatrix);
-        vec3.transformMat4(rayEndView, rayEndView, projectionMatrix);
-        vec3.transformMat4(rayOrigin, rayOriginView, viewMatrix);
-        vec3.transformMat4(rayEnd, rayEndView, viewMatrix);
-        const rayDirection = vec3.create();
-        vec3.subtract(rayDirection, rayEnd, rayOrigin);
-        vec3.normalize(rayDirection, rayDirection);
-
-        const posterMatrix = currentPoster.matrix;
-        const posterPosition = vec3.create();
-        mat4.getTranslation(posterPosition, posterMatrix);
-
-        const radius = controls.scale * 0.25;
-        const ray = new Ray(rayOrigin, rayDirection);
-        const toPoster = vec3.create();
-        vec3.subtract(toPoster, posterPosition, rayOrigin);
-        const t = vec3.dot(toPoster, rayDirection);
-        if (t < 0) return false;
-        const closestPoint = vec3.create();
-        vec3.scaleAndAdd(closestPoint, rayOrigin, rayDirection, t);
-        const distance = vec3.distance(closestPoint, posterPosition);
-        return distance < radius;
+      // Handle image upload
+      function handleImageUpload(event) {
+        const file = event.target.files[0];
+        if (file && file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = async (e) => {
+            try {
+              imageTexture = await loadTexture(e.target.result);
+              console.log('Image uploaded and texture created successfully');
+            } catch (error) {
+              console.error('Error loading uploaded image:', error);
+              alert('Error loading image. Please try again.');
+            }
+          };
+          reader.readAsDataURL(file);
+        }
       }
 
       function initXR() {
@@ -242,6 +321,10 @@
             });
         }
 
+        // Setup image upload listener
+        document.getElementById('imageInput').addEventListener('change', handleImageUpload);
+
+        // Setup control listeners
         document.getElementById('scale').addEventListener('input', (e) => {
           controls.scale = parseFloat(e.target.value);
           updatePosterTransform();
@@ -258,14 +341,6 @@
           controls.posZ = parseFloat(e.target.value);
           updatePosterTransform();
         });
-        document.getElementById('rotX').addEventListener('input', (e) => {
-          controls.rotX = parseFloat(e.target.value);
-          updatePosterTransform();
-        });
-        document.getElementById('rotY').addEventListener('input', (e) => {
-          controls.rotY = parseFloat(e.target.value);
-          updatePosterTransform();
-        });
         document.getElementById('rotZ').addEventListener('input', (e) => {
           controls.rotZ = parseFloat(e.target.value);
           updatePosterTransform();
@@ -276,11 +351,13 @@
             currentPoster = null;
             document.getElementById('controls').style.display = 'none';
             document.getElementById('guidance').style.display = 'block';
-            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 90, rotZ: 0 };
+            // Reset controls
+            controls = { scale: 1.0, posX: 0, posY: 0, posZ: 0.01, rotZ: 0 };
             updatePosterTransform();
           }
         });
 
+        // Setup minimize/maximize toggle
         document.getElementById('toggleControls').addEventListener('click', () => {
           const controlsPanel = document.getElementById('controlsPanel');
           const toggleIcon = document.getElementById('toggleIcon');
@@ -292,59 +369,6 @@
             toggleIcon.textContent = '+';
           }
         });
-
-        const canvas = document.querySelector('canvas');
-        if (canvas) {
-          canvas.addEventListener('touchstart', (e) => {
-            if (!currentPoster || !lastPose) return;
-            e.preventDefault();
-            const touchX = e.touches[0].clientX;
-            const touchY = e.touches[0].clientY;
-            if (e.touches.length === 1 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
-              isDragging = true;
-              lastTouchX = touchX;
-              lastTouchY = touchY;
-            } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
-              isPinching = true;
-              const dx = e.touches[1].clientX - e.touches[0].clientX;
-              const dy = e.touches[1].clientY - e.touches[0].clientY;
-              initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-              initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
-            }
-          });
-
-          canvas.addEventListener('touchmove', (e) => {
-            if (!currentPoster) return;
-            e.preventDefault();
-            if (isDragging && e.touches.length === 1) {
-              const touchX = e.touches[0].clientX;
-              const touchY = e.touches[0].clientY;
-              const deltaX = touchX - lastTouchX;
-              const deltaY = touchY - lastTouchY;
-              controls.rotY += deltaX * 0.5;
-              controls.rotX += deltaY * 0.5;
-              lastTouchX = touchX;
-              lastTouchY = touchY;
-              updatePosterTransform();
-            } else if (isPinching && e.touches.length === 2) {
-              const dx = e.touches[1].clientX - e.touches[0].clientX;
-              const dy = e.touches[1].clientY - e.touches[0].clientY;
-              const currentDistance = Math.sqrt(dx * dx + dy * dy);
-              const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-              const scaleChange = currentDistance / initialPinchDistance;
-              controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
-              controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
-              initialPinchDistance = currentDistance;
-              initialPinchAngle = currentAngle;
-              updatePosterTransform();
-            }
-          });
-
-          canvas.addEventListener('touchend', (e) => {
-            isDragging = false;
-            isPinching = false;
-          });
-        }
       }
 
       function onRequestSession() {
@@ -356,7 +380,7 @@
           xrButton.setSession(session);
           onSessionStarted(session);
         }).catch((error) => {
-          alert('AR Session Error: ' + error.message);
+          alert(`AR Session Error: ${error.message}`);
         });
       }
 
@@ -378,7 +402,7 @@
             renderer = new Renderer(gl);
             scene.setRenderer(renderer);
           } catch (error) {
-            alert('WebGL Error: ' + error.message);
+            alert(`WebGL Error: ${error.message}`);
             session.end();
             return;
           }
@@ -387,7 +411,7 @@
         try {
           session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
         } catch (error) {
-          alert('XRWebGLLayer Error: ' + error.message);
+          alert(`XRWebGLLayer Error: ${error.message}`);
           session.end();
           return;
         }
@@ -397,7 +421,7 @@
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
             xrHitTestSource = hitTestSource;
           }).catch((error) => {
-            alert('HitTest Error: ' + error.message);
+            console.warn(`HitTest Error: ${error.message}`);
           });
         });
 
@@ -405,15 +429,25 @@
           xrRefSpace = refSpace;
           session.requestAnimationFrame(onXRFrame);
         }).catch((error) => {
-          alert('RefSpace Error: ' + error.message);
+          alert(`RefSpace Error: ${error.message}`);
         });
 
+        // Load default texture if none uploaded
+        if (!imageTexture) {
+          loadTexture(defaultImageUrl).then(texture => {
+            imageTexture = texture;
+          }).catch(console.error);
+        }
+
+        // Show guidance initially
         document.getElementById('guidance').style.display = 'block';
       }
 
       function onEndSession(session) {
-        xrHitTestSource.cancel();
-        xrHitTestSource = null;
+        if (xrHitTestSource) {
+          xrHitTestSource.cancel();
+          xrHitTestSource = null;
+        }
         session.end();
       }
 
@@ -421,8 +455,14 @@
         xrButton.setSession(null);
       }
 
-      function addARObjectAt(matrix) {
-        if (currentPoster) return;
+      async function addARObjectAt(matrix) {
+        // Only place if no poster exists and we have a texture
+        if (currentPoster || !imageTexture) {
+          if (!imageTexture) {
+            alert('Please upload an image first!');
+          }
+          return;
+        }
 
         let hitMatrix = mat4.clone(matrix);
         let position = vec3.create();
@@ -434,51 +474,51 @@
         vec3.transformQuat(upVector, upVector, rotation);
         vec3.normalize(upVector, upVector);
 
-        let surfaceType = Math.abs(upVector[1]) > 0.3 ? 'Floor' : 'Wall';
-        if (surfaceType !== 'Wall') {
-          alert('Surface is not a wall, please point at a vertical surface');
-          return;
+        let surfaceNormal = vec3.create();
+        let surfaceType = '';
+        if (Math.abs(upVector[1]) > 0.7) {
+          surfaceNormal = vec3.clone(upVector);
+          surfaceType = 'Floor';
+        } else {
+          let viewerForward = vec3.fromValues(0, 0, -1);
+          vec3.transformQuat(viewerForward, viewerForward, rotation);
+          surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
+          vec3.normalize(surfaceNormal, surfaceNormal);
+          vec3.negate(surfaceNormal, surfaceNormal);
+          surfaceType = 'Wall';
         }
 
-        if (!wallArtLoaded || !imagePlaneLoaded) {
-          alert('Waiting for assets to load, please try again');
-          return;
-        }
+        // Only place on walls
+        if (surfaceType !== 'Wall') return;
+
+        // Create wall art node with uploaded texture
+        let wallArtNode = createWallArtNode(imageTexture);
+        wallArtNode.visible = true;
+
+        // Position the wall art
+        let modelZ = vec3.fromValues(0, 0, -1);
+        let alignRotation = quat.create();
+        quat.rotationTo(alignRotation, modelZ, surfaceNormal);
 
         let finalMatrix = mat4.create();
-        mat4.fromRotationTranslation(finalMatrix, rotation, position);
+        let offset = vec3.scale(vec3.create(), surfaceNormal, controls.posZ);
+        vec3.add(position, position, offset);
+        mat4.fromRotationTranslation(finalMatrix, alignRotation, position);
 
-        let newObject = new Node();
-        newObject.visible = true;
-
-        let newWallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
-        newWallArt.onLoad = () => alert('New WallArt.glb loaded for poster');
-        newWallArt.onError = (error) => alert('Error loading new WallArt.glb: ' + error.message);
-        vec3.set(newWallArt.scale, 0.5, 0.5, 0.5);
-        newObject.addNode(newWallArt);
-
-        let newImagePlane = new Gltf2Node({url: 'media/gltf/imagePlane/imagePlane.gltf'});
-        newImagePlane.onLoad = () => alert('New imagePlane.gltf loaded for poster');
-        newImagePlane.onError = (error) => alert('Error loading new imagePlane.gltf: ' + error.message);
-        mat4.translate(newImagePlane.matrix, newImagePlane.matrix, [0, 0, 0.02]);
-        vec3.set(newImagePlane.scale, 0.48, 0.48, 1);
-        newObject.addNode(newImagePlane);
-
-        currentPoster = newObject;
+        currentPoster = wallArtNode;
         baseMatrix = mat4.clone(finalMatrix);
 
-        scene.addNode(newObject);
-        alert('Poster placed with ' + newObject.children.length + ' children');
-
+        // Apply current controls
         updatePosterTransform();
+        scene.addNode(wallArtNode);
 
+        // Show controls, hide guidance
         document.getElementById('controls').style.display = 'block';
         document.getElementById('guidance').style.display = 'none';
       }
 
       function onSelect(event) {
         if (reticle.visible) {
-          alert('Tapped to place poster');
           addARObjectAt(reticle.matrix);
         }
       }
@@ -505,7 +545,8 @@
             vec3.transformQuat(upVector, upVector, rotation);
             vec3.normalize(upVector, upVector);
 
-            let surfaceType = Math.abs(upVector[1]) > 0.3 ? 'Floor' : 'Wall';
+            let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
+
             if (surfaceType === 'Wall') {
               reticle.visible = true;
               reticle.matrix = hitMatrix;
