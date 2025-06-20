@@ -458,7 +458,7 @@
         // Only place on walls
         if (surfaceType !== 'Wall') return;
 
-        let modelZ = vec3.fromValues(45, 45, -1);
+        let modelZ = vec3.fromValues(45, 0, -1);
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
 
@@ -468,12 +468,18 @@
         mat4.fromRotationTranslation(finalMatrix, rotation, position);
         mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
+           // Apply 90-degree y-rotation
+        let yRotationQuat = quat.create();
+        quat.fromEuler(yRotationQuat, 0, 90, 0); // 90 degrees around y-axis
+        let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
+        mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
+
         let newObject = arObject.clone();
         newObject.visible = true;
         currentPoster = newObject;
         baseMatrix = mat4.clone(finalMatrix);
 
-        // Apply current controls
+        // Apply current controls (with rotY initialized to 90)
         updatePosterTransform();
         scene.addNode(newObject);
 
