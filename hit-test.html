@@ -121,7 +121,10 @@
 
       // WebGL scene globals
       let gl = null;
-      let renderer = null;
+      let shaderProgram = null;
+      let attribLocations = null;
+      let uniformLocations = null;
+      
       let scene = new Scene();
       scene.enableStats(false);
 
@@ -192,48 +195,57 @@
           );
           
           try {
-            const texture = renderer.createTexture({
-              source: canvas,
-              flipY: true
-            });
+            // Create WebGL texture directly
+            const texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
             
-            logDebug('Texture created successfully');
+            logDebug('WebGL texture created successfully');
             
-            plane.mesh = renderer.createSimpleMesh({
-              position: [0, 0, 0],
-              normal: [0, 0, 1],
-              texCoord: [0, 0]
-            }, {
-              positions: [
-                -0.5, -0.5, 0,
-                0.5, -0.5, 0,
-                -0.5, 0.5, 0,
-                0.5, 0.5, 0
-              ],
-              normals: [
-                0, 0, 1,
-                0, 0, 1,
-                0, 0, 1,
-                0, 0, 1
-              ],
-              texCoords: [
-                0, 0,
-                1, 0,
-                0, 1,
-                1, 1
-              ],
-              indices: [0, 1, 2, 2, 1, 3]
-            }, {
-              baseColorTexture: texture,
-              baseColorFactor: [1, 1, 1, 1],
-              metallicFactor: 0,
-              roughnessFactor: 1,
-              doubleSided: true
-            });
+            // Create simple geometry
+            const positions = new Float32Array([
+              -0.5, -0.5, 0,
+              0.5, -0.5, 0,
+              -0.5, 0.5, 0,
+              0.5, 0.5, 0
+            ]);
             
-            logDebug('Mesh created successfully');
+            const texCoords = new Float32Array([
+              0, 0,
+              1, 0,
+              0, 1,
+              1, 1
+            ]);
+            
+            const indices = new Uint16Array([0, 1, 2, 2, 1, 3]);
+            
+            // Create buffers
+            const positionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+            
+            const texCoordBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
+            
+            const indexBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+            
+            // Store references on the plane node
+            plane._positionBuffer = positionBuffer;
+            plane._texCoordBuffer = texCoordBuffer;
+            plane._indexBuffer = indexBuffer;
+            plane._texture = texture;
+            plane._indicesCount = indices.length;
+            
+            logDebug('Geometry buffers created successfully');
           } catch (error) {
-            logDebug(`Error creating texture/mesh: ${error.message}`);
+            logDebug(`Error creating WebGL resources: ${error.message}`);
             console.error(error);
           }
         };
@@ -288,58 +300,109 @@
         document.getElementById('rotZ').value = controls.rotZ;
       }
 
-      function rayIntersectsPoster(touchX, touchY, canvas, pose) {
-        if (!currentPoster || !pose) return false;
-
-        const rect = canvas.getBoundingClientRect();
-        const ndcX = (2.0 * touchX - rect.width) / rect.width;
-        const ndcY = (rect.height - 2.0 * touchY) / rect.height;
-
-        const projectionMatrix = mat4.create();
-        const fov = 60 * Math.PI / 180;
-        mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
-        const viewMatrix = pose.views[0].transform.inverse.matrix;
-
-        const rayOrigin = vec3.create();
-        const rayEnd = vec3.fromValues(ndcX, ndcY, -1);
-        const rayOriginView = vec3.fromValues(ndcX, ndcY, -1);
-        const rayEndView = vec3.fromValues(ndcX, ndcY, 1);
-        mat4.invert(projectionMatrix, projectionMatrix);
-        vec3.transformMat4(rayOriginView, rayOriginView, projectionMatrix);
-        vec3.transformMat4(rayEndView, rayEndView, projectionMatrix);
-        vec3.transformMat4(rayOrigin, rayOriginView, viewMatrix);
-        vec3.transformMat4(rayEnd, rayEndView, viewMatrix);
-        const rayDirection = vec3.create();
-        vec3.subtract(rayDirection, rayEnd, rayOrigin);
-        vec3.normalize(rayDirection, rayDirection);
-
-        const posterMatrix = currentPoster.matrix;
-        const posterPosition = vec3.create();
-        const posterNormal = vec3.fromValues(0, 0, 1);
-        const worldNormal = vec3.create();
-        mat4.getTranslation(posterPosition, posterMatrix);
-        vec3.transformMat4(worldNormal, posterNormal, posterMatrix);
-        vec3.subtract(worldNormal, worldNormal, posterPosition);
-        vec3.normalize(worldNormal, worldNormal);
-
-        const denom = vec3.dot(worldNormal, rayDirection);
-        if (Math.abs(denom) > 0.0001) {
-          const toPlane = vec3.create();
-          vec3.subtract(toPlane, posterPosition, rayOrigin);
-          const t = vec3.dot(toPlane, worldNormal) / denom;
-          if (t >= 0) {
-            const intersection = vec3.create();
-            vec3.scaleAndAdd(intersection, rayOrigin, rayDirection, t);
-            
-            const invMatrix = mat4.create();
-            mat4.invert(invMatrix, posterMatrix);
-            const localPos = vec3.create();
-            vec3.transformMat4(localPos, intersection, invMatrix);
-            
-            return Math.abs(localPos[0]) <= 0.5 && Math.abs(localPos[1]) <= 0.5;
+      function initShaderProgram() {
+        const vsSource = `
+          attribute vec3 aPosition;
+          attribute vec2 aTexCoord;
+          uniform mat4 uModelViewMatrix;
+          uniform mat4 uProjectionMatrix;
+          varying vec2 vTexCoord;
+          void main() {
+            gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0);
+            vTexCoord = aTexCoord;
           }
+        `;
+        
+        const fsSource = `
+          precision mediump float;
+          varying vec2 vTexCoord;
+          uniform sampler2D uSampler;
+          void main() {
+            gl_FragColor = texture2D(uSampler, vTexCoord);
+          }
+        `;
+        
+        const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vertexShader, vsSource);
+        gl.compileShader(vertexShader);
+        
+        const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fragmentShader, fsSource);
+        gl.compileShader(fragmentShader);
+        
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          logDebug(`Shader program link error: ${gl.getProgramInfoLog(program)}`);
+          return null;
         }
-        return false;
+        
+        return {
+          program: program,
+          attribLocations: {
+            position: gl.getAttribLocation(program, 'aPosition'),
+            texCoord: gl.getAttribLocation(program, 'aTexCoord')
+          },
+          uniformLocations: {
+            projectionMatrix: gl.getUniformLocation(program, 'uProjectionMatrix'),
+            modelViewMatrix: gl.getUniformLocation(program, 'uModelViewMatrix'),
+            sampler: gl.getUniformLocation(program, 'uSampler')
+          }
+        };
+      }
+
+      function drawNode(node, viewMatrix) {
+        if (!node.visible || !node._positionBuffer) return;
+        
+        const modelViewMatrix = mat4.create();
+        mat4.multiply(modelViewMatrix, viewMatrix, node.matrix);
+        
+        gl.uniformMatrix4fv(
+          uniformLocations.modelViewMatrix,
+          false,
+          modelViewMatrix
+        );
+        
+        // Position attribute
+        gl.bindBuffer(gl.ARRAY_BUFFER, node._positionBuffer);
+        gl.vertexAttribPointer(
+          attribLocations.position,
+          3,
+          gl.FLOAT,
+          false,
+          0,
+          0
+        );
+        gl.enableVertexAttribArray(attribLocations.position);
+        
+        // Texture coordinate attribute
+        gl.bindBuffer(gl.ARRAY_BUFFER, node._texCoordBuffer);
+        gl.vertexAttribPointer(
+          attribLocations.texCoord,
+          2,
+          gl.FLOAT,
+          false,
+          0,
+          0
+        );
+        gl.enableVertexAttribArray(attribLocations.texCoord);
+        
+        // Bind texture
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, node._texture);
+        gl.uniform1i(uniformLocations.sampler, 0);
+        
+        // Draw elements
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, node._indexBuffer);
+        gl.drawElements(
+          gl.TRIANGLES,
+          node._indicesCount,
+          gl.UNSIGNED_SHORT,
+          0
+        );
       }
 
       function initXR() {
@@ -410,65 +473,6 @@
             toggleIcon.textContent = '+';
           }
         });
-
-        const canvas = document.querySelector('canvas');
-        if (canvas) {
-          canvas.addEventListener('touchstart', (e) => {
-            if (!currentPoster || !lastPose) return;
-            e.preventDefault();
-            const touchX = e.touches[0].clientX;
-            const touchY = e.touches[0].clientY;
-            if (e.touches.length === 1 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
-              isDragging = true;
-              lastTouchX = touchX;
-              lastTouchY = touchY;
-            } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
-              isPinching = true;
-              const dx = e.touches[1].clientX - e.touches[0].clientX;
-              const dy = e.touches[1].clientY - e.touches[0].clientY;
-              initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-              initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
-            }
-          });
-
-          canvas.addEventListener('touchmove', (e) => {
-            if (!currentPoster) return;
-            e.preventDefault();
-            if (isDragging && e.touches.length === 1) {
-              const touchX = e.touches[0].clientX;
-              const touchY = e.touches[0].clientY;
-              const deltaX = touchX - lastTouchX;
-              const deltaY = touchY - lastTouchY;
-              controls.rotY += deltaX * 0.5;
-              controls.rotX += deltaY * 0.5;
-              lastTouchX = touchX;
-              lastTouchY = touchY;
-              updatePosterTransform();
-            } else if (isPinching && e.touches.length === 2) {
-              const dx = e.touches[1].clientX - e.touches[0].clientX;
-              const dy = e.touches[1].clientY - e.touches[0].clientY;
-              const currentDistance = Math.sqrt(dx * dx + dy * dy);
-              const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-              const scaleChange = currentDistance / initialPinchDistance;
-              controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
-              controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
-              initialPinchDistance = currentDistance;
-              initialPinchAngle = currentAngle;
-              updatePosterTransform();
-            }
-          });
-
-          canvas.addEventListener('touchend', (e) => {
-            isDragging = false;
-            isPinching = false;
-          });
-        }
-
-        // Test image loading
-        const testImage = new Image();
-        testImage.onload = () => logDebug('Test image loaded successfully');
-        testImage.onerror = () => logDebug('Test image failed to load');
-        testImage.src = 'media/images/wallart.png';
       }
 
       function onRequestSession() {
@@ -494,16 +498,31 @@
             gl = createWebGLContext({
               xrCompatible: true,
               alpha: true,
-              preserveDrawingBuffer: true // For debugging
+              preserveDrawingBuffer: true
             });
             if (!gl) {
               alert('Error: Failed to create WebGL context');
               session.end();
               return;
             }
-            renderer = new Renderer(gl);
-            scene.setRenderer(renderer);
-            logDebug('WebGL context and renderer created');
+            
+            // Initialize shader program
+            const shaderInfo = initShaderProgram();
+            if (!shaderInfo) {
+              alert('Error: Failed to initialize shader program');
+              session.end();
+              return;
+            }
+            
+            shaderProgram = shaderInfo.program;
+            attribLocations = shaderInfo.attribLocations;
+            uniformLocations = shaderInfo.uniformLocations;
+            
+            gl.enable(gl.DEPTH_TEST);
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            
+            logDebug('WebGL context and shaders created successfully');
           } catch (error) {
             alert(`WebGL Error: ${error.message}`);
             session.end();
@@ -604,7 +623,7 @@
           mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
 
           // Update this path to your actual image
-          let newObject = createImagePlaneNode('media/images/wallart1.png');
+          let newObject = createImagePlaneNode('media/images/wallart.png');
           newObject.visible = true;
           currentPoster = newObject;
           baseMatrix = mat4.clone(finalMatrix);
@@ -636,6 +655,13 @@
         reticle.visible = false;
         document.getElementById('guidance').style.display = currentPoster ? 'none' : 'block';
 
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.useProgram(shaderProgram);
+
+        // Clear the canvas
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
         if (xrHitTestSource && pose && !currentPoster) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
@@ -660,10 +686,34 @@
           }
         }
 
-        scene.startFrame();
+        // Set up projection matrix
+        const projectionMatrix = mat4.create();
+        if (pose) {
+          for (const view of pose.views) {
+            const viewport = view.viewport;
+            gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
+            
+            mat4.perspective(projectionMatrix, view.fov.angleUp * 2, 
+                            viewport.width / viewport.height, 0.1, 1000.0);
+            gl.uniformMatrix4fv(
+              uniformLocations.projectionMatrix,
+              false,
+              projectionMatrix
+            );
+            
+            // Draw the reticle
+            if (reticle.visible) {
+              drawNode(reticle, view.transform.inverse.matrix);
+            }
+            
+            // Draw the current poster
+            if (currentPoster) {
+              drawNode(currentPoster, view.transform.inverse.matrix);
+            }
+          }
+        }
+
         session.requestAnimationFrame(onXRFrame);
-        scene.drawXRFrame(frame, pose);
-        scene.endFrame();
       }
 
       initXR();
