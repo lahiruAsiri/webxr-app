@@ -7,6 +7,7 @@
     <meta name='apple-mobile-web-app-capable' content='yes'>
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
+    <!-- Add Tailwind CSS via CDN for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body { margin: 0; }
@@ -23,43 +24,28 @@
         font-family: Arial, sans-serif;
         display: none;
       }
-      #debug {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        background: rgba(0,0,0,0.7);
-        color: white;
-        padding: 10px;
-        z-index: 1000;
-        font-family: monospace;
-        font-size: 14px;
-        max-width: 100%;
-        overflow: auto;
-        max-height: 100px;
-      }
     </style>
-    <title>AR Wall Art</title>
+    <title>Hit Test</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>AR Wall Art</summary>
+        <summary>Hit Test</summary>
         <p>
-          Point at a wall to see the blue reticle, then tap to place your artwork. 
-          Use controls to adjust position and rotation.
+          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Z axis) to adjust. Click "Remove Poster" to place a new one.
           <a class="back" href="./">Back</a>
         </p>
       </details>
     </header>
-    <div id="guidance">Point at a wall to place your artwork.</div>
-    <div id="debug"></div>
-    
+    <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
     <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
+      <!-- Minimize/Maximize toggle button -->
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
       </button>
+      <!-- Controls panel -->
       <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
-        <h3 class="text-lg font-semibold text-gray-800 mb-4">Artwork Controls</h3>
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
         <div class="space-y-4">
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Size:</label>
@@ -90,12 +76,11 @@
             <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
           <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
-            Remove Artwork
+            Remove Poster
           </button>
         </div>
       </div>
     </div>
-
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
@@ -105,14 +90,6 @@
       import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
       import {Ray} from './js/render/math/ray.js';
 
-      // Debugging system
-      function logDebug(message) {
-        console.log('[DEBUG]', message);
-        const debugDiv = document.getElementById('debug');
-        debugDiv.textContent += message + '\n';
-        debugDiv.scrollTop = debugDiv.scrollHeight;
-      }
-
       // XR globals
       let xrButton = null;
       let xrRefSpace = null;
@@ -121,10 +98,7 @@
 
       // WebGL scene globals
       let gl = null;
-      let shaderProgram = null;
-      let attribLocations = null;
-      let uniformLocations = null;
-      
+      let renderer = null;
       let scene = new Scene();
       scene.enableStats(false);
 
@@ -132,13 +106,19 @@
       arObject.visible = false;
       scene.addNode(arObject);
 
+      let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
+      vec3.set(wallArt.scale, 0.5, 0.5, 0.5);
+      wallArt.onLoad = () => console.log('WallArt.glb loaded successfully');
+      wallArt.onError = (error) => console.error('Error loading WallArt.glb:', error);
+      arObject.addNode(wallArt);
+
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
       scene.addNode(reticle);
 
       scene.clear = false;
 
-      // Artwork management
+      // Single poster management
       let currentPoster = null;
       let baseMatrix = mat4.create();
       let controls = {
@@ -146,122 +126,19 @@
         posX: 0,
         posY: 0,
         posZ: 0,
-        rotX: 0,
-        rotY: 90,
+        rotX: 90,
+        rotY: 0,
         rotZ: 0
       };
 
-      function createImagePlaneNode(imageUrl) {
-        logDebug(`Creating image plane with: ${imageUrl}`);
-        
-        const plane = new Node();
-        plane.visible = true;
-        
-        const canvas = document.createElement('canvas');
-        canvas.width = 1024;
-        canvas.height = 1024;
-        const ctx = canvas.getContext('2d');
-        
-        // Initial debug pattern
-        ctx.fillStyle = '#ff0000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '30px Arial';
-        ctx.fillText('Loading...', 50, 50);
-        
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        
-        img.onload = function() {
-          logDebug('Image loaded successfully');
-          
-          const aspect = img.width / img.height;
-          let drawWidth, drawHeight;
-          
-          if (aspect > 1) {
-            drawWidth = canvas.width;
-            drawHeight = canvas.width / aspect;
-          } else {
-            drawHeight = canvas.height;
-            drawWidth = canvas.height * aspect;
-          }
-          
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 
-            (canvas.width - drawWidth) / 2, 
-            (canvas.height - drawHeight) / 2,
-            drawWidth, 
-            drawHeight
-          );
-          
-          try {
-            // Create WebGL texture directly
-            const texture = gl.createTexture();
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            
-            logDebug('WebGL texture created successfully');
-            
-            // Create simple geometry
-            const positions = new Float32Array([
-              -0.5, -0.5, 0,
-              0.5, -0.5, 0,
-              -0.5, 0.5, 0,
-              0.5, 0.5, 0
-            ]);
-            
-            const texCoords = new Float32Array([
-              0, 0,
-              1, 0,
-              0, 1,
-              1, 1
-            ]);
-            
-            const indices = new Uint16Array([0, 1, 2, 2, 1, 3]);
-            
-            // Create buffers
-            const positionBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-            
-            const texCoordBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
-            
-            const indexBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-            
-            // Store references on the plane node
-            plane._positionBuffer = positionBuffer;
-            plane._texCoordBuffer = texCoordBuffer;
-            plane._indexBuffer = indexBuffer;
-            plane._texture = texture;
-            plane._indicesCount = indices.length;
-            
-            logDebug('Geometry buffers created successfully');
-          } catch (error) {
-            logDebug(`Error creating WebGL resources: ${error.message}`);
-            console.error(error);
-          }
-        };
-        
-        img.onerror = function() {
-          logDebug(`Error loading image: ${imageUrl}`);
-          ctx.fillStyle = '#00ff00';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = '#000000';
-          ctx.font = '30px Arial';
-          ctx.fillText('Image Error', 50, 50);
-        };
-        
-        img.src = imageUrl;
-        return plane;
-      }
+      // Touch control variables
+      let isDragging = false;
+      let isPinching = false;
+      let lastTouchX = 0;
+      let lastTouchY = 0;
+      let initialPinchAngle = 0;
+      let initialPinchDistance = 0;
+      let lastPose = null;
 
       function updatePosterTransform() {
         if (!currentPoster) return;
@@ -300,109 +177,51 @@
         document.getElementById('rotZ').value = controls.rotZ;
       }
 
-      function initShaderProgram() {
-        const vsSource = `
-          attribute vec3 aPosition;
-          attribute vec2 aTexCoord;
-          uniform mat4 uModelViewMatrix;
-          uniform mat4 uProjectionMatrix;
-          varying vec2 vTexCoord;
-          void main() {
-            gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0);
-            vTexCoord = aTexCoord;
-          }
-        `;
-        
-        const fsSource = `
-          precision mediump float;
-          varying vec2 vTexCoord;
-          uniform sampler2D uSampler;
-          void main() {
-            gl_FragColor = texture2D(uSampler, vTexCoord);
-          }
-        `;
-        
-        const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-        gl.shaderSource(vertexShader, vsSource);
-        gl.compileShader(vertexShader);
-        
-        const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-        gl.shaderSource(fragmentShader, fsSource);
-        gl.compileShader(fragmentShader);
-        
-        const program = gl.createProgram();
-        gl.attachShader(program, vertexShader);
-        gl.attachShader(program, fragmentShader);
-        gl.linkProgram(program);
-        
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-          logDebug(`Shader program link error: ${gl.getProgramInfoLog(program)}`);
-          return null;
-        }
-        
-        return {
-          program: program,
-          attribLocations: {
-            position: gl.getAttribLocation(program, 'aPosition'),
-            texCoord: gl.getAttribLocation(program, 'aTexCoord')
-          },
-          uniformLocations: {
-            projectionMatrix: gl.getUniformLocation(program, 'uProjectionMatrix'),
-            modelViewMatrix: gl.getUniformLocation(program, 'uModelViewMatrix'),
-            sampler: gl.getUniformLocation(program, 'uSampler')
-          }
-        };
-      }
+      // Raycasting to check if touch hits the poster
+      function rayIntersectsPoster(touchX, touchY, canvas, pose) {
+        if (!currentPoster || !pose) return false;
 
-      function drawNode(node, viewMatrix) {
-        if (!node.visible || !node._positionBuffer) return;
-        
-        const modelViewMatrix = mat4.create();
-        mat4.multiply(modelViewMatrix, viewMatrix, node.matrix);
-        
-        gl.uniformMatrix4fv(
-          uniformLocations.modelViewMatrix,
-          false,
-          modelViewMatrix
-        );
-        
-        // Position attribute
-        gl.bindBuffer(gl.ARRAY_BUFFER, node._positionBuffer);
-        gl.vertexAttribPointer(
-          attribLocations.position,
-          3,
-          gl.FLOAT,
-          false,
-          0,
-          0
-        );
-        gl.enableVertexAttribArray(attribLocations.position);
-        
-        // Texture coordinate attribute
-        gl.bindBuffer(gl.ARRAY_BUFFER, node._texCoordBuffer);
-        gl.vertexAttribPointer(
-          attribLocations.texCoord,
-          2,
-          gl.FLOAT,
-          false,
-          0,
-          0
-        );
-        gl.enableVertexAttribArray(attribLocations.texCoord);
-        
-        // Bind texture
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, node._texture);
-        gl.uniform1i(uniformLocations.sampler, 0);
-        
-        // Draw elements
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, node._indexBuffer);
-        gl.drawElements(
-          gl.TRIANGLES,
-          node._indicesCount,
-          gl.UNSIGNED_SHORT,
-          0
-        );
+        // Convert touch to normalized device coordinates (-1 to 1)
+        const rect = canvas.getBoundingClientRect();
+        const ndcX = (2.0 * touchX - rect.width) / rect.width;
+        const ndcY = (rect.height - 2.0 * touchY) / rect.height;
+
+        // Get projection and view matrices
+        const projectionMatrix = mat4.create();
+        const fov = 60 * Math.PI / 180; // Assume 60° FOV
+        mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
+        const viewMatrix = pose.views[0].transform.inverse.matrix;
+
+        // Create ray in world space
+        const rayOrigin = vec3.create();
+        const rayEnd = vec3.fromValues(ndcX, ndcY, -1);
+        const rayOriginView = vec3.fromValues(ndcX, ndcY, -1);
+        const rayEndView = vec3.fromValues(ndcX, ndcY, 1);
+        mat4.invert(projectionMatrix, projectionMatrix);
+        vec3.transformMat4(rayOriginView, rayOriginView, projectionMatrix);
+        vec3.transformMat4(rayEndView, rayEndView, projectionMatrix);
+        vec3.transformMat4(rayOrigin, rayOriginView, viewMatrix);
+        vec3.transformMat4(rayEnd, rayEndView, viewMatrix);
+        const rayDirection = vec3.create();
+        vec3.subtract(rayDirection, rayEnd, rayOrigin);
+        vec3.normalize(rayDirection, rayDirection);
+
+        // Get poster’s world position
+        const posterMatrix = currentPoster.matrix;
+        const posterPosition = vec3.create();
+        mat4.getTranslation(posterPosition, posterMatrix);
+
+        // Approximate poster as a sphere (radius based on scale)
+        const radius = controls.scale * 0.25; // Assume WallArt.glb is ~0.5m wide
+        const ray = new Ray(rayOrigin, rayDirection);
+        const toPoster = vec3.create();
+        vec3.subtract(toPoster, posterPosition, rayOrigin);
+        const t = vec3.dot(toPoster, rayDirection);
+        if (t < 0) return false;
+        const closestPoint = vec3.create();
+        vec3.scaleAndAdd(closestPoint, rayOrigin, rayDirection, t);
+        const distance = vec3.distance(closestPoint, posterPosition);
+        return distance < radius;
       }
 
       function initXR() {
@@ -422,7 +241,7 @@
             });
         }
 
-        // Control listeners
+        // Setup control listeners
         document.getElementById('scale').addEventListener('input', (e) => {
           controls.scale = parseFloat(e.target.value);
           updatePosterTransform();
@@ -457,11 +276,13 @@
             currentPoster = null;
             document.getElementById('controls').style.display = 'none';
             document.getElementById('guidance').style.display = 'block';
-            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 90, rotZ: 0 };
+            // Reset controls
+            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
             updatePosterTransform();
           }
         });
 
+        // Setup minimize/maximize toggle
         document.getElementById('toggleControls').addEventListener('click', () => {
           const controlsPanel = document.getElementById('controlsPanel');
           const toggleIcon = document.getElementById('toggleIcon');
@@ -473,6 +294,62 @@
             toggleIcon.textContent = '+';
           }
         });
+
+        // Setup touch controls on canvas
+        const canvas = document.querySelector('canvas');
+        if (canvas) {
+          canvas.addEventListener('touchstart', (e) => {
+            if (!currentPoster || !lastPose) return;
+            e.preventDefault();
+            const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
+            if (e.touches.length === 1 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
+              isDragging = true;
+              lastTouchX = touchX;
+              lastTouchY = touchY;
+            } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
+              isPinching = true;
+              const dx = e.touches[1].clientX - e.touches[0].clientX;
+              const dy = e.touches[1].clientY - e.touches[0].clientY;
+              initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+              initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
+            }
+          });
+
+          canvas.addEventListener('touchmove', (e) => {
+            if (!currentPoster) return;
+            e.preventDefault();
+            if (isDragging && e.touches.length === 1) {
+              const touchX = e.touches[0].clientX;
+              const touchY = e.touches[0].clientY;
+              const deltaX = touchX - lastTouchX;
+              const deltaY = touchY - lastTouchY;
+              controls.rotY += deltaX * 0.5; // Horizontal drag -> Y rotation
+              controls.rotX += deltaY * 0.5; // Vertical drag -> X rotation
+              lastTouchX = touchX;
+              lastTouchY = touchY;
+              updatePosterTransform();
+            } else if (isPinching && e.touches.length === 2) {
+              const dx = e.touches[1].clientX - e.touches[0].clientX;
+              const dy = e.touches[1].clientY - e.touches[0].clientY;
+              const currentDistance = Math.sqrt(dx * dx + dy * dy);
+              const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+              // Adjust scale based on pinch distance
+              const scaleChange = currentDistance / initialPinchDistance;
+              controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
+              // Adjust Z rotation based on angle
+              controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
+              initialPinchDistance = currentDistance;
+              initialPinchAngle = currentAngle;
+              updatePosterTransform();
+            }
+          });
+
+          canvas.addEventListener('touchend', (e) => {
+            isDragging = false;
+            isPinching = false;
+          });
+        }
       }
 
       function onRequestSession() {
@@ -488,7 +365,6 @@
         });
       }
 
-      let lastPose = null;
       function onSessionStarted(session) {
         session.addEventListener('end', onSessionEnded);
         session.addEventListener('select', onSelect);
@@ -497,32 +373,15 @@
           try {
             gl = createWebGLContext({
               xrCompatible: true,
-              alpha: true,
-              preserveDrawingBuffer: true
+              alpha: true
             });
             if (!gl) {
               alert('Error: Failed to create WebGL context');
               session.end();
               return;
             }
-            
-            // Initialize shader program
-            const shaderInfo = initShaderProgram();
-            if (!shaderInfo) {
-              alert('Error: Failed to initialize shader program');
-              session.end();
-              return;
-            }
-            
-            shaderProgram = shaderInfo.program;
-            attribLocations = shaderInfo.attribLocations;
-            uniformLocations = shaderInfo.uniformLocations;
-            
-            gl.enable(gl.DEPTH_TEST);
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-            
-            logDebug('WebGL context and shaders created successfully');
+            renderer = new Renderer(gl);
+            scene.setRenderer(renderer);
           } catch (error) {
             alert(`WebGL Error: ${error.message}`);
             session.end();
@@ -542,105 +401,95 @@
           xrViewerSpace = refSpace;
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
             xrHitTestSource = hitTestSource;
-            logDebug('Hit test source created');
           }).catch((error) => {
-            logDebug(`HitTest Error: ${error.message}`);
+            alert(`HitTest Error: ${error.message}`);
           });
         });
 
         session.requestReferenceSpace('local').then((refSpace) => {
           xrRefSpace = refSpace;
           session.requestAnimationFrame(onXRFrame);
-          logDebug('XR session started successfully');
         }).catch((error) => {
-          logDebug(`RefSpace Error: ${error.message}`);
+          alert(`RefSpace Error: ${error.message}`);
         });
 
+        // Show guidance initially
         document.getElementById('guidance').style.display = 'block';
       }
 
       function onEndSession(session) {
-        if (xrHitTestSource) {
-          xrHitTestSource.cancel();
-          xrHitTestSource = null;
-        }
+        xrHitTestSource.cancel();
+        xrHitTestSource = null;
         session.end();
       }
 
       function onSessionEnded(event) {
         xrButton.setSession(null);
-        logDebug('XR session ended');
       }
 
       function addARObjectAt(matrix) {
+        // Only place if no poster exists
         if (currentPoster) return;
 
-        logDebug('Attempting to place artwork');
-        
-        try {
-          let hitMatrix = mat4.clone(matrix);
-          let position = vec3.create();
-          let rotation = quat.create();
-          mat4.getTranslation(position, hitMatrix);
-          mat4.getRotation(rotation, hitMatrix);
+        let hitMatrix = mat4.clone(matrix);
+        let position = vec3.create();
+        let rotation = quat.create();
+        mat4.getTranslation(position, hitMatrix);
+        mat4.getRotation(rotation, hitMatrix);
 
-          let upVector = vec3.fromValues(0, 1, 0);
-          vec3.transformQuat(upVector, upVector, rotation);
-          vec3.normalize(upVector, upVector);
+        let upVector = vec3.fromValues(0, 1, 0);
+        vec3.transformQuat(upVector, upVector, rotation);
+        vec3.normalize(upVector, upVector);
 
-          let surfaceNormal = vec3.create();
-          let surfaceType = '';
-          if (Math.abs(upVector[1]) > 0.7) {
-            surfaceNormal = vec3.clone(upVector);
-            surfaceType = 'Floor';
-          } else {
-            let viewerForward = vec3.fromValues(-90, 0, 0);
-            vec3.transformQuat(viewerForward, viewerForward, rotation);
-            surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
-            vec3.normalize(surfaceNormal, surfaceNormal);
-            vec3.negate(surfaceNormal, surfaceNormal);
-            surfaceType = 'Wall';
-          }
-
-          if (surfaceType !== 'Wall') {
-            logDebug('Not placing on wall surface');
-            return;
-          }
-
-          let modelZ = vec3.fromValues(0, 0, -1);
-          let alignRotation = quat.create();
-          quat.rotationTo(alignRotation, modelZ, surfaceNormal);
-
-          let finalMatrix = mat4.create();
-          let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01);
-          vec3.add(position, position, offset);
-          mat4.fromRotationTranslation(finalMatrix, rotation, position);
-          mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
-
-          let yRotationQuat = quat.create();
-          quat.fromEuler(yRotationQuat, 0, 90, 0);
-          let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
-          mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
-
-          // Update this path to your actual image
-          let newObject = createImagePlaneNode('media/images/wallart.png');
-          newObject.visible = true;
-          currentPoster = newObject;
-          baseMatrix = mat4.clone(finalMatrix);
-
-          updatePosterTransform();
-          scene.addNode(newObject);
-          
-          logDebug('Artwork placed successfully');
-
-          document.getElementById('controls').style.display = 'block';
-          document.getElementById('guidance').style.display = 'none';
-        } catch (error) {
-          logDebug(`Error placing artwork: ${error.message}`);
-          console.error(error);
+        let surfaceNormal = vec3.create();
+        let surfaceType = '';
+        if (Math.abs(upVector[1]) > 0.7) {
+          surfaceNormal = vec3.clone(upVector);
+          surfaceType = 'Floor';
+        } else {
+          let viewerForward = vec3.fromValues(-90, 0, 0);
+          vec3.transformQuat(viewerForward, viewerForward, rotation);
+          surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
+          vec3.normalize(surfaceNormal, surfaceNormal);
+          vec3.negate(surfaceNormal, surfaceNormal);
+          surfaceType = 'Wall';
         }
+
+        // Only place on walls
+        if (surfaceType !== 'Wall') return;
+
+        let modelZ = vec3.fromValues(0, 0, -1);
+        let alignRotation = quat.create();
+        quat.rotationTo(alignRotation, modelZ, surfaceNormal);
+
+        let finalMatrix = mat4.create();
+        let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01);
+        vec3.add(position, position, offset);
+        mat4.fromRotationTranslation(finalMatrix, rotation, position);
+        mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
+
+           // Apply 90-degree y-rotation
+        let yRotationQuat = quat.create();
+        quat.fromEuler(yRotationQuat, 0, 90, 0); // 90 degrees around y-axis
+        let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
+        mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
+
+        let newObject = arObject.clone();
+        newObject.visible = true;
+        currentPoster = newObject;
+        baseMatrix = mat4.clone(finalMatrix);
+
+        // Apply current controls (with rotY initialized to 90)
+        updatePosterTransform();
+        scene.addNode(newObject);
+
+        // Show controls, hide guidance
+        document.getElementById('controls').style.display = 'block';
+        document.getElementById('guidance').style.display = 'none';
       }
 
+      let rayOrigin = vec3.create();
+      let rayDirection = vec3.create();
       function onSelect(event) {
         if (reticle.visible) {
           addARObjectAt(reticle.matrix);
@@ -654,13 +503,6 @@
 
         reticle.visible = false;
         document.getElementById('guidance').style.display = currentPoster ? 'none' : 'block';
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        gl.useProgram(shaderProgram);
-
-        // Clear the canvas
-        gl.clearColor(0, 0, 0, 0);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         if (xrHitTestSource && pose && !currentPoster) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
@@ -686,34 +528,10 @@
           }
         }
 
-        // Set up projection matrix
-        const projectionMatrix = mat4.create();
-        if (pose) {
-          for (const view of pose.views) {
-            const viewport = view.viewport;
-            gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
-            
-            mat4.perspective(projectionMatrix, view.fov.angleUp * 2, 
-                            viewport.width / viewport.height, 0.1, 1000.0);
-            gl.uniformMatrix4fv(
-              uniformLocations.projectionMatrix,
-              false,
-              projectionMatrix
-            );
-            
-            // Draw the reticle
-            if (reticle.visible) {
-              drawNode(reticle, view.transform.inverse.matrix);
-            }
-            
-            // Draw the current poster
-            if (currentPoster) {
-              drawNode(currentPoster, view.transform.inverse.matrix);
-            }
-          }
-        }
-
+        scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
+        scene.drawXRFrame(frame, pose);
+        scene.endFrame();
       }
 
       initXR();
