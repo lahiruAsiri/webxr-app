@@ -447,7 +447,7 @@
           surfaceNormal = vec3.clone(upVector);
           surfaceType = 'Floor';
         } else {
-          let viewerForward = vec3.fromValues(-90, 90, 1);
+          let viewerForward = vec3.fromValues(-90, 0, 0);
           vec3.transformQuat(viewerForward, viewerForward, rotation);
           surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
           vec3.normalize(surfaceNormal, surfaceNormal);
@@ -458,7 +458,7 @@
         // Only place on walls
         if (surfaceType !== 'Wall') return;
 
-        let modelZ = vec3.fromValues(0, 0, -1);
+        let modelZ = vec3.fromValues(45, 0, -1);
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
 
