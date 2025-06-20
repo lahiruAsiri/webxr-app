@@ -458,7 +458,7 @@
         // Only place on walls
         if (surfaceType !== 'Wall') return;
 
-        let modelZ = vec3.fromValues(45, -90, -1);
+        let modelZ = vec3.fromValues(45, 45, -1);
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
 
