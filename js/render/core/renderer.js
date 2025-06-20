@@ -795,7 +795,7 @@ export class Renderer {
       return new RenderBuffer(target, usage, glBuffer, data.byteLength);
     }
   }
-  
+
   createTexture(options) {
     const gl = this._gl;
     const texture = gl.createTexture();
@@ -828,6 +828,89 @@ export class Renderer {
     
     return texture;
   }
+
+
+  // Add these methods to the Renderer class
+createSimpleMesh(attributes, geometry, material) {
+  const gl = this._gl;
+  
+  // Create and bind vertex buffer
+  const vertexBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(geometry.positions), gl.STATIC_DRAW);
+  
+  // Create and bind normal buffer if provided
+  let normalBuffer;
+  if (geometry.normals) {
+    normalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(geometry.normals), gl.STATIC_DRAW);
+  }
+  
+  // Create and bind texCoord buffer if provided
+  let texCoordBuffer;
+  if (geometry.texCoords) {
+    texCoordBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(geometry.texCoords), gl.STATIC_DRAW);
+  }
+  
+  // Create and bind index buffer if provided
+  let indexBuffer;
+  if (geometry.indices) {
+    indexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(geometry.indices), gl.STATIC_DRAW);
+  }
+  
+  return {
+    vertexBuffer,
+    normalBuffer,
+    texCoordBuffer,
+    indexBuffer,
+    vertexCount: geometry.positions.length / 3,
+    indexCount: geometry.indices ? geometry.indices.length : 0,
+    material
+  };
+}
+
+createPrimitiveFromMesh(mesh) {
+  const primitive = {
+    mode: WebGLRenderingContext.TRIANGLES,
+    attributes: [
+      {
+        name: 'POSITION',
+        buffer: { _buffer: mesh.vertexBuffer },
+        componentCount: 3
+      }
+    ],
+    elementCount: mesh.indexCount || mesh.vertexCount
+  };
+  
+  if (mesh.normalBuffer) {
+    primitive.attributes.push({
+      name: 'NORMAL',
+      buffer: { _buffer: mesh.normalBuffer },
+      componentCount: 3
+    });
+  }
+  
+  if (mesh.texCoordBuffer) {
+    primitive.attributes.push({
+      name: 'TEXCOORD_0',
+      buffer: { _buffer: mesh.texCoordBuffer },
+      componentCount: 2
+    });
+  }
+  
+  if (mesh.indexBuffer) {
+    primitive.indexBuffer = { _buffer: mesh.indexBuffer };
+    primitive.indexType = WebGLRenderingContext.UNSIGNED_SHORT;
+  }
+  
+  return primitive;
+}
+
 
   updateRenderBuffer(buffer, data, offset = 0) {
     if (buffer._buffer) {
