@@ -7,7 +7,6 @@
     <meta name='apple-mobile-web-app-capable' content='yes'>
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
-    <!-- Add Tailwind CSS via CDN for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body { margin: 0; }
@@ -39,11 +38,9 @@
     </header>
     <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
     <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
-      <!-- Minimize/Maximize toggle button -->
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
       </button>
-      <!-- Controls panel -->
       <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
         <div class="space-y-4">
@@ -69,7 +66,7 @@
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Y Rotation:</label>
-            <input type="range" id="rotY" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
+            <input type="range" id="rotY" min="-180" max="180" step="1" value="90" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
@@ -126,8 +123,204 @@
         posX: 0,
         posY: 0,
         posZ: 0,
-        rotX: 90,
-        rotY: 0,
+        rotX: 0,
+        rotY: 90, // Keep as 90 per original code
+        rotZ: 0
+      };
+
+      // Touch control variables
+      let isDragging = false;
+      let isPinching = false;
+      let lastTouchX = 0;
+      let lastTouchY = 0;
+      let initialPinchAngle = 0;
+      let initialPinchDistance = 0;
+      let lastPose = null;
+
+      function updatePosterTransform() {
+        if (!currentPoster) return;
+
+        let matrix = mat4.clone(baseMatrix);
+        let position = vec3.create();
+        let rotation = quat.create();
+        mat4.getTranslation(position, matrix);
+        mat4.getRotation(rotation, matrix);
+
+        // Apply position offsets
+        let offset = vec3.fromValues(controls.posX, controls.posY, controls.posZ);
+        vec3.add(position, position, offset);
+
+        // Apply user rotations
+        let userRotation = quat.create();
+        quat.fromEuler(userRotation, controls.rotX, controls.rotY, controls.rotZ);
+        quat.multiply(rotation, rotation, userRotation);
+
+        // Apply scale
+        let scaleMatrix = mat4.create();
+        mat4.fromScaling(scaleMatrix, [controls.scale, controls.scale, controls.scale]);
+        let transformMatrix = mat4.create();
+        mat4.fromRotationTranslation(transformMatrix, rotation, position);
+        mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
+
+        currentPoster.matrix = transformMatrix;
+
+        // Update sliders
+        document.getElementById('scale').value = controls.scale;
+        document.getElementById('posX').value = controls.posX;
+        document.getElementById('posYહ
+
+System: Thank you for providing the correct code and clarifying the issue further. I understand that the poster in your WebXR application appears in a “bottom pulled” position (tilted outward, perpendicular to the wall) when placed, and adjusting the X rotation slider slightly corrects it to lie flat against the wall. You want the poster to be placed flat against the wall initially, matching the orientation achieved after tweaking the X rotation slider, while keeping all other functionality intact and only modifying the `addARObjectAt` and `onSelect` functions (and necessary dependencies like `controls` and the HTML slider).
+
+### Analysis
+- **Current Behavior**:
+  - In `addARObjectAt`, the poster’s local z-axis (`modelZ: (0, 0, -1)`) is aligned to the wall’s normal using `quat.rotationTo(alignRotation, modelZ, surfaceNormal)`, which should make it flat against the wall.
+  - A 90-degree y-rotation is applied via `quat.fromEuler(yRotationQuat, 0, 90, 0)`, rotating the poster around its local y-axis after alignment.
+  - The “bottom pulled” effect (poster perpendicular to the wall, bottom tilted outward) suggests an additional rotation, likely around the x-axis, is occurring. Since adjusting `controls.rotX` fixes it, the issue is likely related to the model’s orientation or an interaction between the y-rotation and the wall’s normal alignment.
+  - The `viewerForward` vector (`(-90, 0, 0)`) used to compute the wall’s normal may also contribute to misalignment if it’s not correctly oriented.
+
+- **Issue**:
+  - The 90-degree y-rotation rotates the poster’s local z-axis 90 degrees, potentially causing it to face sideways relative to the wall’s normal, which may contribute to the tilt.
+  - The tilt corrected by the X rotation slider suggests an unwanted x-rotation in the `baseMatrix`. This could be due to the model’s default orientation in `WallArt.glb` or the transformation chain.
+  - The `controls.rotX` starts at 0, so the tilt isn’t caused by user input but by the initial `finalMatrix` setup.
+
+- **Goal**:
+  - Modify `addARObjectAt` to place the poster flat against the wall, eliminating the “bottom pulled” tilt, while keeping the 90-degree y-rotation as specified.
+  - Adjust the initial orientation to match the corrected position achieved by tweaking `controls.rotX`.
+  - Only modify the `addARObjectAt` and `onSelect` functions, `controls` object, HTML slider, and `removePoster` listener (for consistency) in the provided code.
+
+### Solution
+Since adjusting the X rotation slider corrects the tilt, we need to apply an x-rotation in `addARObjectAt` to counteract the unwanted tilt, ensuring the poster is flat against the wall. The tilt is likely a 90-degree rotation around the x-axis (or -90 degrees, depending on the model’s coordinate system) caused by the model’s orientation or the transformation chain. We’ll add a 90-degree x-rotation before the y-rotation to align the poster’s face parallel to the wall.
+
+Here’s the updated `index.html`:
+
+<xaiArtifact artifact_id="9bfec860-872b-4d4d-886f-5febcb5b10a8" artifact_version_id="dd7fe00e-52ab-45d2-b324-da37fa451cd1" title="index.html" contentType="text/html">
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
+    <meta name='mobile-web-app-capable' content='yes'>
+    <meta name='apple-mobile-web-app-capable' content='yes'>
+    <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
+    <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { margin: 0; }
+      #guidance {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        z-index: 1000;
+        font-family: Arial, sans-serif;
+        display: none;
+      }
+    </style>
+    <title>Hit Test</title>
+  </head>
+  <body>
+    <header>
+      <details open>
+        <summary>Hit Test</summary>
+        <p>
+          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Z axis) to adjust. Click "Remove Poster" to place a new one.
+          <a class="back" href="./">Back</a>
+        </p>
+      </details>
+    </header>
+    <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
+    <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
+      <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
+        <span id="toggleIcon">-</span>
+      </button>
+      <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
+        <div class="space-y-4">
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Size:</label>
+            <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">X Position:</label>
+            <input type="range" id="posX" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Y Position:</label>
+            <input type="range" id="posY" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Z Position:</label>
+            <input type="range" id="posZ" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">X Rotation:</label>
+            <input type="range" id="rotX" min="-180" max="180" step="1" value="90" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Y Rotation:</label>
+            <input type="range" id="rotY" min="-180" max="180" step="1" value="90" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
+            <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
+          </div>
+          <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
+            Remove Poster
+          </button>
+        </div>
+      </div>
+    </div>
+    <script type="module">
+      import {WebXRButton} from './js/util/webxr-button.js';
+      import {Scene} from './js/render/scenes/scene.js';
+      import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
+      import {Node} from './js/render/core/node.js';
+      import {Gltf2Node} from './js/render/nodes/gltf2.js';
+      import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
+      import {Ray} from './js/render/math/ray.js';
+
+      // XR globals
+      let xrButton = null;
+      let xrRefSpace = null;
+      let xrViewerSpace = null;
+      let xrHitTestSource = null;
+
+      // WebGL scene globals
+      let gl = null;
+      let renderer = null;
+      let scene = new Scene();
+      scene.enableStats(false);
+
+      let arObject = new Node();
+      arObject.visible = false;
+      scene.addNode(arObject);
+
+      let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
+      vec3.set(wallArt.scale, 0.5, 0.5, 0.5);
+      wallArt.onLoad = () => console.log('WallArt.glb loaded successfully');
+      wallArt.onError = (error) => console.error('Error loading WallArt.glb:', error);
+      arObject.addNode(wallArt);
+
+      let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
+      reticle.visible = false;
+      scene.addNode(reticle);
+
+      scene.clear = false;
+
+      // Single poster management
+      let currentPoster = null;
+      let baseMatrix = mat4.create();
+      let controls = {
+        scale: 0.5,
+        posX: 0,
+        posY: 0,
+        posZ: 0,
+        rotX: 90, // Initialize to 90 to match corrected orientation
+        rotY: 90,
         rotZ: 0
       };
 
@@ -177,22 +370,18 @@
         document.getElementById('rotZ').value = controls.rotZ;
       }
 
-      // Raycasting to check if touch hits the poster
       function rayIntersectsPoster(touchX, touchY, canvas, pose) {
         if (!currentPoster || !pose) return false;
 
-        // Convert touch to normalized device coordinates (-1 to 1)
         const rect = canvas.getBoundingClientRect();
         const ndcX = (2.0 * touchX - rect.width) / rect.width;
         const ndcY = (rect.height - 2.0 * touchY) / rect.height;
 
-        // Get projection and view matrices
         const projectionMatrix = mat4.create();
-        const fov = 60 * Math.PI / 180; // Assume 60° FOV
+        const fov = 60 * Math.PI / 180;
         mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
         const viewMatrix = pose.views[0].transform.inverse.matrix;
 
-        // Create ray in world space
         const rayOrigin = vec3.create();
         const rayEnd = vec3.fromValues(ndcX, ndcY, -1);
         const rayOriginView = vec3.fromValues(ndcX, ndcY, -1);
@@ -206,13 +395,11 @@
         vec3.subtract(rayDirection, rayEnd, rayOrigin);
         vec3.normalize(rayDirection, rayDirection);
 
-        // Get poster’s world position
         const posterMatrix = currentPoster.matrix;
         const posterPosition = vec3.create();
         mat4.getTranslation(posterPosition, posterMatrix);
 
-        // Approximate poster as a sphere (radius based on scale)
-        const radius = controls.scale * 0.25; // Assume WallArt.glb is ~0.5m wide
+        const radius = controls.scale * 0.25;
         const ray = new Ray(rayOrigin, rayDirection);
         const toPoster = vec3.create();
         vec3.subtract(toPoster, posterPosition, rayOrigin);
@@ -241,7 +428,6 @@
             });
         }
 
-        // Setup control listeners
         document.getElementById('scale').addEventListener('input', (e) => {
           controls.scale = parseFloat(e.target.value);
           updatePosterTransform();
@@ -276,13 +462,11 @@
             currentPoster = null;
             document.getElementById('controls').style.display = 'none';
             document.getElementById('guidance').style.display = 'block';
-            // Reset controls
-            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
+            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 90, rotY: 90, rotZ: 0 };
             updatePosterTransform();
           }
         });
 
-        // Setup minimize/maximize toggle
         document.getElementById('toggleControls').addEventListener('click', () => {
           const controlsPanel = document.getElementById('controlsPanel');
           const toggleIcon = document.getElementById('toggleIcon');
@@ -295,7 +479,6 @@
           }
         });
 
-        // Setup touch controls on canvas
         const canvas = document.querySelector('canvas');
         if (canvas) {
           canvas.addEventListener('touchstart', (e) => {
@@ -324,8 +507,8 @@
               const touchY = e.touches[0].clientY;
               const deltaX = touchX - lastTouchX;
               const deltaY = touchY - lastTouchY;
-              controls.rotY += deltaX * 0.5; // Horizontal drag -> Y rotation
-              controls.rotX += deltaY * 0.5; // Vertical drag -> X rotation
+              controls.rotY += deltaX * 0.5;
+              controls.rotX += deltaY * 0.5;
               lastTouchX = touchX;
               lastTouchY = touchY;
               updatePosterTransform();
@@ -334,10 +517,8 @@
               const dy = e.touches[1].clientY - e.touches[0].clientY;
               const currentDistance = Math.sqrt(dx * dx + dy * dy);
               const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-              // Adjust scale based on pinch distance
               const scaleChange = currentDistance / initialPinchDistance;
               controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
-              // Adjust Z rotation based on angle
               controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
               initialPinchDistance = currentDistance;
               initialPinchAngle = currentAngle;
@@ -413,7 +594,6 @@
           alert(`RefSpace Error: ${error.message}`);
         });
 
-        // Show guidance initially
         document.getElementById('guidance').style.display = 'block';
       }
 
@@ -428,7 +608,6 @@
       }
 
       function addARObjectAt(matrix) {
-        // Only place if no poster exists
         if (currentPoster) return;
 
         let hitMatrix = mat4.clone(matrix);
@@ -455,7 +634,6 @@
           surfaceType = 'Wall';
         }
 
-        // Only place on walls
         if (surfaceType !== 'Wall') return;
 
         let modelZ = vec3.fromValues(0, 0, -1);
@@ -468,7 +646,13 @@
         mat4.fromRotationTranslation(finalMatrix, rotation, position);
         mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
-           // Apply 90-degree y-rotation
+        // Apply 90-degree x-rotation to correct tilt
+        let xRotationQuat = quat.create();
+        quat.fromEuler(xRotationQuat, 90, 0, 0); // 90 degrees around x-axis
+        let xRotationMatrix = mat4.fromQuat(mat4.create(), xRotationQuat);
+        mat4.multiply(finalMatrix, finalMatrix, xRotationMatrix);
+
+        // Apply 90-degree y-rotation
         let yRotationQuat = quat.create();
         quat.fromEuler(yRotationQuat, 0, 90, 0); // 90 degrees around y-axis
         let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
@@ -479,11 +663,9 @@
         currentPoster = newObject;
         baseMatrix = mat4.clone(finalMatrix);
 
-        // Apply current controls (with rotY initialized to 90)
         updatePosterTransform();
         scene.addNode(newObject);
 
-        // Show controls, hide guidance
         document.getElementById('controls').style.display = 'block';
         document.getElementById('guidance').style.display = 'none';
       }
