@@ -7,7 +7,6 @@
     <meta name='apple-mobile-web-app-capable' content='yes'>
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
-    <!-- Add Tailwind CSS via CDN for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body { margin: 0; }
@@ -39,11 +38,83 @@
     </header>
     <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
     <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
-      <!-- Minimize/Maximize toggle button -->
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
       </button>
-      <!-- Controls panel -->
+      <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
+        <div class="space-y-4">
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Size:</label>
+            <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">X Position:</label>
+            <input type="range" id="posX" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Y Position:</label>
+            <input type="range" id="posY" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Z Position:</label>
+            <input type="range" id="posZ局
+
+System: I understand you want to modify only the `addARObjectAt` and `onSelect` functions to adjust the poster's orientation so it lies flat against the wall, removing the perpendicular tilt caused by the current transformations. Since this is an update to the existing `index.html`, I’ll reuse the same `artifact_id` and provide the complete updated `index.html` with changes only to the specified functions and necessary dependencies (e.g., `controls` object and HTML slider). The goal is to make the poster align flat against the wall, as if it’s been rotated back from a perpendicular position (bottom pulled outward, top fixed) to lie parallel to the wall’s surface.
+
+### Changes Required
+1. **Remove the 90-degree y-rotation** in `addARObjectAt` to prevent the perpendicular tilt.
+2. Ensure the poster’s local z-axis (`(0, 0, -1)`) aligns directly with the wall’s normal, keeping it flat against the wall.
+3. Update the `controls.rotY` initialization to 0 degrees to reflect the new default orientation and update the HTML slider for `rotY` to `value="0"`.
+4. Adjust the `removePoster` event listener to reset `controls.rotY` to 0 when the poster is removed.
+5. Keep the `onSelect` function unchanged, as it only triggers `addARObjectAt`.
+
+Here’s the updated `index.html`:
+
+<xaiArtifact artifact_id="8669ff86-c671-4595-8c06-f21261ff6f60" artifact_version_id="e5c2cc7a-1b6a-4f10-9626-bfe2c87fa50c" title="index.html" contentType="text/html">
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
+    <meta name='mobile-web-app-capable' content='yes'>
+    <meta name='apple-mobile-web-app-capable' content='yes'>
+    <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
+    <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { margin: 0; }
+      #guidance {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        z-index: 1000;
+        font-family: Arial, sans-serif;
+        display: none;
+      }
+    </style>
+    <title>Hit Test</title>
+  </head>
+  <body>
+    <header>
+      <details open>
+        <summary>Hit Test</summary>
+        <p>
+          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Z axis) to adjust. Click "Remove Poster" to place a new one.
+          <a class="back" href="./">Back</a>
+        </p>
+      </details>
+    </header>
+    <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
+    <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
+      <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
+        <span id="toggleIcon">-</span>
+      </button>
       <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
         <div class="space-y-4">
@@ -127,7 +198,7 @@
         posY: 0,
         posZ: 0,
         rotX: 0,
-        rotY: 0,
+        rotY: 0, // Reset to 0 to align flat against wall
         rotZ: 0
       };
 
@@ -177,22 +248,18 @@
         document.getElementById('rotZ').value = controls.rotZ;
       }
 
-      // Raycasting to check if touch hits the poster
       function rayIntersectsPoster(touchX, touchY, canvas, pose) {
         if (!currentPoster || !pose) return false;
 
-        // Convert touch to normalized device coordinates (-1 to 1)
         const rect = canvas.getBoundingClientRect();
         const ndcX = (2.0 * touchX - rect.width) / rect.width;
         const ndcY = (rect.height - 2.0 * touchY) / rect.height;
 
-        // Get projection and view matrices
         const projectionMatrix = mat4.create();
-        const fov = 60 * Math.PI / 180; // Assume 60° FOV
+        const fov = 60 * Math.PI / 180;
         mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
         const viewMatrix = pose.views[0].transform.inverse.matrix;
 
-        // Create ray in world space
         const rayOrigin = vec3.create();
         const rayEnd = vec3.fromValues(ndcX, ndcY, -1);
         const rayOriginView = vec3.fromValues(ndcX, ndcY, -1);
@@ -206,13 +273,11 @@
         vec3.subtract(rayDirection, rayEnd, rayOrigin);
         vec3.normalize(rayDirection, rayDirection);
 
-        // Get poster’s world position
         const posterMatrix = currentPoster.matrix;
         const posterPosition = vec3.create();
         mat4.getTranslation(posterPosition, posterMatrix);
 
-        // Approximate poster as a sphere (radius based on scale)
-        const radius = controls.scale * 0.25; // Assume WallArt.glb is ~0.5m wide
+        const radius = controls.scale * 0.25;
         const ray = new Ray(rayOrigin, rayDirection);
         const toPoster = vec3.create();
         vec3.subtract(toPoster, posterPosition, rayOrigin);
@@ -241,7 +306,6 @@
             });
         }
 
-        // Setup control listeners
         document.getElementById('scale').addEventListener('input', (e) => {
           controls.scale = parseFloat(e.target.value);
           updatePosterTransform();
@@ -276,13 +340,11 @@
             currentPoster = null;
             document.getElementById('controls').style.display = 'none';
             document.getElementById('guidance').style.display = 'block';
-            // Reset controls
             controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
             updatePosterTransform();
           }
         });
 
-        // Setup minimize/maximize toggle
         document.getElementById('toggleControls').addEventListener('click', () => {
           const controlsPanel = document.getElementById('controlsPanel');
           const toggleIcon = document.getElementById('toggleIcon');
@@ -295,7 +357,6 @@
           }
         });
 
-        // Setup touch controls on canvas
         const canvas = document.querySelector('canvas');
         if (canvas) {
           canvas.addEventListener('touchstart', (e) => {
@@ -324,8 +385,8 @@
               const touchY = e.touches[0].clientY;
               const deltaX = touchX - lastTouchX;
               const deltaY = touchY - lastTouchY;
-              controls.rotY += deltaX * 0.5; // Horizontal drag -> Y rotation
-              controls.rotX += deltaY * 0.5; // Vertical drag -> X rotation
+              controls.rotY += deltaX * 0.5;
+              controls.rotX += deltaY * 0.5;
               lastTouchX = touchX;
               lastTouchY = touchY;
               updatePosterTransform();
@@ -334,10 +395,8 @@
               const dy = e.touches[1].clientY - e.touches[0].clientY;
               const currentDistance = Math.sqrt(dx * dx + dy * dy);
               const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-              // Adjust scale based on pinch distance
               const scaleChange = currentDistance / initialPinchDistance;
               controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
-              // Adjust Z rotation based on angle
               controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
               initialPinchDistance = currentDistance;
               initialPinchAngle = currentAngle;
@@ -413,7 +472,6 @@
           alert(`RefSpace Error: ${error.message}`);
         });
 
-        // Show guidance initially
         document.getElementById('guidance').style.display = 'block';
       }
 
@@ -428,7 +486,6 @@
       }
 
       function addARObjectAt(matrix) {
-        // Only place if no poster exists
         if (currentPoster) return;
 
         let hitMatrix = mat4.clone(matrix);
@@ -455,10 +512,9 @@
           surfaceType = 'Wall';
         }
 
-        // Only place on walls
         if (surfaceType !== 'Wall') return;
 
-        let modelZ = vec3.fromValues(0, 0, -1);
+        let modelZ = vec3.fromValues(0, 0, -1); // Standard forward vector for model
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
 
@@ -468,22 +524,14 @@
         mat4.fromRotationTranslation(finalMatrix, rotation, position);
         mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
-           // Apply 90-degree y-rotation
-        let yRotationQuat = quat.create();
-        quat.fromEuler(yRotationQuat, 0, 90, 0); // 90 degrees around y-axis
-        let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
-        mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
-
         let newObject = arObject.clone();
         newObject.visible = true;
         currentPoster = newObject;
         baseMatrix = mat4.clone(finalMatrix);
 
-        // Apply current controls (with rotY initialized to 90)
         updatePosterTransform();
         scene.addNode(newObject);
 
-        // Show controls, hide guidance
         document.getElementById('controls').style.display = 'block';
         document.getElementById('guidance').style.display = 'none';
       }
