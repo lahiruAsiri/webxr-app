@@ -31,12 +31,12 @@
       <details open>
         <summary>Hit Test</summary>
         <p>
-          Point at a wall to see the blue reticle, then tap to place a poster with an image. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Z axis) to adjust. Click "Remove Poster" to place a new one.
+          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster to adjust. Click "Remove Poster" to place a new one.
           <a class="back" href="./">Back</a>
         </p>
       </details>
     </header>
-    <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
+    <div id="guidance">Point at a wall to see the blue reticle and tap to place the poster.</div>
     <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
@@ -100,19 +100,20 @@
       scene.enableStats(false);
 
       let arObject = new Node();
+      arObject.visible = true;
       scene.addNode(arObject);
 
       let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
       vec3.set(wallArt.scale, 0.5, 0.5, 0.5);
-      wallArt.onLoad = () => console.log('WallArt.glb loaded successfully');
-      wallArt.onError = (error) => console.error('Error loading WallArt.glb:', error);
+      wallArt.onLoad = () => alert('WallArt.glb loaded successfully');
+      wallArt.onError = (error) => alert('Error loading WallArt.glb: ' + error.message);
       arObject.addNode(wallArt);
 
       let imagePlane = new Gltf2Node({url: 'media/gltf/imagePlane/imagePlane.gltf'});
-      imagePlane.onLoad = () => console.log('imagePlane.gltf loaded successfully');
-      imagePlane.onError = (error) => console.error('Error loading imagePlane.gltf:', error);
-      mat4.translate(imagePlane.matrix, imagePlane.matrix, [0, 0, 0.02]); // Increased offset
-      vec3.set(imagePlane.scale, 0.48, 0.48, 1); // Slightly smaller than wallArt
+      imagePlane.onLoad = () => alert('imagePlane.gltf loaded successfully');
+      imagePlane.onError = (error) => alert('Error loading imagePlane.gltf: ' + error.message);
+      mat4.translate(imagePlane.matrix, imagePlane.matrix, [0, 0, 0.02]);
+      vec3.set(imagePlane.scale, 0.48, 0.48, 1);
       arObject.addNode(imagePlane);
 
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
@@ -166,14 +167,7 @@
         mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
 
         currentPoster.matrix = transformMatrix;
-        currentPoster.visible = true; // Ensure visibility
-
-        console.log('Poster transform updated:', {
-          position: position,
-          rotation: rotation,
-          scale: controls.scale,
-          visible: currentPoster.visible
-        });
+        currentPoster.visible = true;
 
         document.getElementById('scale').value = controls.scale;
         document.getElementById('posX').value = controls.posX;
@@ -356,7 +350,7 @@
           xrButton.setSession(session);
           onSessionStarted(session);
         }).catch((error) => {
-          alert(`AR Session Error: ${error.message}`);
+          alert('AR Session Error: ' + error.message);
         });
       }
 
@@ -378,7 +372,7 @@
             renderer = new Renderer(gl);
             scene.setRenderer(renderer);
           } catch (error) {
-            alert(`WebGL Error: ${error.message}`);
+            alert('WebGL Error: ' + error.message);
             session.end();
             return;
           }
@@ -387,7 +381,7 @@
         try {
           session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
         } catch (error) {
-          alert(`XRWebGLLayer Error: ${error.message}`);
+          alert('XRWebGLLayer Error: ' + error.message);
           session.end();
           return;
         }
@@ -397,7 +391,7 @@
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
             xrHitTestSource = hitTestSource;
           }).catch((error) => {
-            alert(`HitTest Error: ${error.message}`);
+            alert('HitTest Error: ' + error.message);
           });
         });
 
@@ -405,7 +399,7 @@
           xrRefSpace = refSpace;
           session.requestAnimationFrame(onXRFrame);
         }).catch((error) => {
-          alert(`RefSpace Error: ${error.message}`);
+          alert('RefSpace Error: ' + error.message);
         });
 
         document.getElementById('guidance').style.display = 'block';
@@ -434,36 +428,14 @@
         vec3.transformQuat(upVector, upVector, rotation);
         vec3.normalize(upVector, upVector);
 
-        let surfaceNormal = vec3.create();
-        let surfaceType = '';
-        console.log('Up vector:', upVector);
-        if (Math.abs(upVector[1]) > 0.7) {
-          surfaceNormal = vec3.clone(upVector);
-          surfaceType = 'Floor';
-        } else {
-          surfaceNormal = vec3.fromValues(0, 0, -1); // Assume wall normal
-          surfaceType = 'Wall';
-        }
-        console.log('Surface type:', surfaceType);
-
+        let surfaceType = Math.abs(upVector[1]) > 0.5 ? 'Floor' : 'Wall';
         if (surfaceType !== 'Wall') {
-          console.log('Not a wall, skipping poster placement');
+          alert('Surface is not a wall, please point at a vertical surface');
           return;
         }
 
-        let modelZ = vec3.fromValues(0, 0, -1);
-        let alignRotation = quat.create();
-        quat.rotationTo(alignRotation, modelZ, surfaceNormal);
-
         let finalMatrix = mat4.create();
-        let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01);
-        vec3.add(position, position, offset);
-        mat4.fromRotationTranslation(finalMatrix, alignRotation, position);
-
-        let yRotationQuat = quat.create();
-        quat.fromEuler(yRotationQuat, 0, 90, 0);
-        let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
-        mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
+        mat4.fromRotationTranslation(finalMatrix, rotation, position);
 
         let newObject = arObject.clone();
         newObject.visible = true;
@@ -471,11 +443,7 @@
         baseMatrix = mat4.clone(finalMatrix);
 
         scene.addNode(newObject);
-        console.log('Poster added:', {
-          matrix: finalMatrix,
-          children: newObject.children.length,
-          visible: newObject.visible
-        });
+        alert('Poster placed with ' + newObject.children.length + ' children');
 
         updatePosterTransform();
 
@@ -483,11 +451,9 @@
         document.getElementById('guidance').style.display = 'none';
       }
 
-      let rayOrigin = vec3.create();
-      let rayDirection = vec3.create();
       function onSelect(event) {
         if (reticle.visible) {
-          console.log('Select event triggered, adding poster at reticle position');
+          alert('Tapped to place poster');
           addARObjectAt(reticle.matrix);
         }
       }
@@ -514,9 +480,7 @@
             vec3.transformQuat(upVector, upVector, rotation);
             vec3.normalize(upVector, upVector);
 
-            let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
-            console.log('Hit test surface:', surfaceType, 'Up vector:', upVector);
-
+            let surfaceType = Math.abs(upVector[1]) > 0.5 ? 'Floor' : 'Wall';
             if (surfaceType === 'Wall') {
               reticle.visible = true;
               reticle.matrix = hitMatrix;
