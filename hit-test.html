@@ -99,25 +99,10 @@
       let scene = new Scene();
       scene.enableStats(false);
 
-      let arObject = new Node();
-      arObject.visible = true;
-      scene.addNode(arObject);
-
-      let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
-      vec3.set(wallArt.scale, 0.5, 0.5, 0.5);
-      wallArt.onLoad = () => alert('WallArt.glb loaded successfully');
-      wallArt.onError = (error) => alert('Error loading WallArt.glb: ' + error.message);
-      arObject.addNode(wallArt);
-
-      let imagePlane = new Gltf2Node({url: 'media/gltf/imagePlane/imagePlane.gltf'});
-      imagePlane.onLoad = () => alert('imagePlane.gltf loaded successfully');
-      imagePlane.onError = (error) => alert('Error loading imagePlane.gltf: ' + error.message);
-      mat4.translate(imagePlane.matrix, imagePlane.matrix, [0, 0, 0.02]);
-      vec3.set(imagePlane.scale, 0.48, 0.48, 1);
-      arObject.addNode(imagePlane);
-
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
+      reticle.onLoad = () => alert('Reticle loaded successfully');
+      reticle.onError = (error) => alert('Error loading reticle: ' + error.message);
       scene.addNode(reticle);
 
       scene.clear = false;
@@ -134,6 +119,27 @@
         rotY: 90,
         rotZ: 0
       };
+
+      // Track loading status
+      let wallArtLoaded = false;
+      let imagePlaneLoaded = false;
+
+      let wallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
+      wallArt.onLoad = () => {
+        wallArtLoaded = true;
+        alert('WallArt.glb loaded successfully');
+      };
+      wallArt.onError = (error) => alert('Error loading WallArt.glb: ' + error.message);
+      vec3.set(wallArt.scale, 0.5, 0.5, 0.5);
+
+      let imagePlane = new Gltf2Node({url: 'media/gltf/imagePlane/imagePlane.gltf'});
+      imagePlane.onLoad = () => {
+        imagePlaneLoaded = true;
+        alert('imagePlane.gltf loaded successfully');
+      };
+      imagePlane.onError = (error) => alert('Error loading imagePlane.gltf: ' + error.message);
+      mat4.translate(imagePlane.matrix, imagePlane.matrix, [0, 0, 0.02]);
+      vec3.set(imagePlane.scale, 0.48, 0.48, 1);
 
       // Touch control variables
       let isDragging = false;
@@ -428,17 +434,36 @@
         vec3.transformQuat(upVector, upVector, rotation);
         vec3.normalize(upVector, upVector);
 
-        let surfaceType = Math.abs(upVector[1]) > 0.5 ? 'Floor' : 'Wall';
+        let surfaceType = Math.abs(upVector[1]) > 0.3 ? 'Floor' : 'Wall';
         if (surfaceType !== 'Wall') {
           alert('Surface is not a wall, please point at a vertical surface');
+          return;
+        }
+
+        if (!wallArtLoaded || !imagePlaneLoaded) {
+          alert('Waiting for assets to load, please try again');
           return;
         }
 
         let finalMatrix = mat4.create();
         mat4.fromRotationTranslation(finalMatrix, rotation, position);
 
-        let newObject = arObject.clone();
+        let newObject = new Node();
         newObject.visible = true;
+
+        let newWallArt = new Gltf2Node({url: 'media/gltf/wallart/WallArt.glb'});
+        newWallArt.onLoad = () => alert('New WallArt.glb loaded for poster');
+        newWallArt.onError = (error) => alert('Error loading new WallArt.glb: ' + error.message);
+        vec3.set(newWallArt.scale, 0.5, 0.5, 0.5);
+        newObject.addNode(newWallArt);
+
+        let newImagePlane = new Gltf2Node({url: 'media/gltf/imagePlane/imagePlane.gltf'});
+        newImagePlane.onLoad = () => alert('New imagePlane.gltf loaded for poster');
+        newImagePlane.onError = (error) => alert('Error loading new imagePlane.gltf: ' + error.message);
+        mat4.translate(newImagePlane.matrix, newImagePlane.matrix, [0, 0, 0.02]);
+        vec3.set(newImagePlane.scale, 0.48, 0.48, 1);
+        newObject.addNode(newImagePlane);
+
         currentPoster = newObject;
         baseMatrix = mat4.clone(finalMatrix);
 
@@ -480,7 +505,7 @@
             vec3.transformQuat(upVector, upVector, rotation);
             vec3.normalize(upVector, upVector);
 
-            let surfaceType = Math.abs(upVector[1]) > 0.5 ? 'Floor' : 'Wall';
+            let surfaceType = Math.abs(upVector[1]) > 0.3 ? 'Floor' : 'Wall';
             if (surfaceType === 'Wall') {
               reticle.visible = true;
               reticle.matrix = hitMatrix;
