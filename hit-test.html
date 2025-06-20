@@ -24,7 +24,7 @@
         font-family: Arial, sans-serif;
         display: none;
       }
-      #imageUpload {
+      #imageSelection {
         position: fixed;
         top: 10px;
         right: 10px;
@@ -42,16 +42,21 @@
       <details open>
         <summary>PNG Wall Art AR</summary>
         <p>
-          Upload your PNG image, then point at a wall to see the blue reticle and tap to place your custom wall art. Use controls to adjust size and position.
+          Select your wall art from the dropdown, then point at a wall to see the blue reticle and tap to place your wall art. Use controls to adjust size and position.
           <a class="back" href="./">Back</a>
         </p>
       </details>
     </header>
     
-    <!-- Image Upload Section -->
-    <div id="imageUpload">
-      <input type="file" id="imageInput" accept="image/png,image/jpg,image/jpeg" class="mb-2">
-      <div class="text-sm text-gray-600">Upload your wall art image</div>
+    <!-- Image Selection Section -->
+    <div id="imageSelection">
+      <select id="imageSelect" class="mb-2 p-2 border rounded">
+        <option value="media/images/wallart1.png">Wall Art 1</option>
+        <option value="media/images/wallart2.png">Wall Art 2</option>
+        <option value="media/images/wallart3.png">Wall Art 3</option>
+        <option value="media/images/poster.png">Poster</option>
+      </select>
+      <div class="text-sm text-gray-600">Select your wall art</div>
     </div>
     
     <div id="guidance">Point at a wall to see the blue reticle and place your custom wall art.</div>
@@ -115,7 +120,7 @@
 
       // Image texture globals
       let imageTexture = null;
-      let defaultImageUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='; // 1x1 transparent pixel
+      let currentImagePath = 'media/images/wallart1.png'; // Default image
 
       // Reticle for hit testing
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
@@ -286,22 +291,39 @@
         document.getElementById('rotZ').value = controls.rotZ;
       }
 
-      // Handle image upload
-      function handleImageUpload(event) {
-        const file = event.target.files[0];
-        if (file && file.type.startsWith('image/')) {
-          const reader = new FileReader();
-          reader.onload = async (e) => {
-            try {
-              imageTexture = await loadTexture(e.target.result);
-              console.log('Image uploaded and texture created successfully');
-            } catch (error) {
-              console.error('Error loading uploaded image:', error);
-              alert('Error loading image. Please try again.');
-            }
-          };
-          reader.readAsDataURL(file);
-        }
+      // Handle image selection
+      function handleImageSelection(event) {
+        const selectedPath = event.target.value;
+        currentImagePath = selectedPath;
+        
+        // Load the new texture
+        loadTexture(selectedPath).then(texture => {
+          imageTexture = texture;
+          console.log('Image loaded successfully:', selectedPath);
+          
+          // If there's already a poster placed, update it with the new texture
+          if (currentPoster) {
+            // Remove current poster and create new one with new texture
+            scene.removeNode(currentPoster);
+            createWallArtAtCurrentPosition();
+          }
+        }).catch(error => {
+          console.error('Error loading image:', error);
+          alert('Error loading image: ' + selectedPath);
+        });
+      }
+
+      // Create wall art at current position (for texture updates)
+      function createWallArtAtCurrentPosition() {
+        if (!imageTexture || !baseMatrix) return;
+        
+        let wallArtNode = createWallArtNode(imageTexture);
+        wallArtNode.visible = true;
+        currentPoster = wallArtNode;
+        
+        // Apply current controls
+        updatePosterTransform();
+        scene.addNode(wallArtNode);
       }
 
       function initXR() {
@@ -321,8 +343,8 @@
             });
         }
 
-        // Setup image upload listener
-        document.getElementById('imageInput').addEventListener('change', handleImageUpload);
+        // Setup image selection listener
+        document.getElementById('imageSelect').addEventListener('change', handleImageSelection);
 
         // Setup control listeners
         document.getElementById('scale').addEventListener('input', (e) => {
@@ -432,12 +454,13 @@
           alert(`RefSpace Error: ${error.message}`);
         });
 
-        // Load default texture if none uploaded
-        if (!imageTexture) {
-          loadTexture(defaultImageUrl).then(texture => {
-            imageTexture = texture;
-          }).catch(console.error);
-        }
+        // Load default texture
+        loadTexture(currentImagePath).then(texture => {
+          imageTexture = texture;
+          console.log('Default image loaded successfully');
+        }).catch(error => {
+          console.error('Error loading default image:', error);
+        });
 
         // Show guidance initially
         document.getElementById('guidance').style.display = 'block';
@@ -459,7 +482,7 @@
         // Only place if no poster exists and we have a texture
         if (currentPoster || !imageTexture) {
           if (!imageTexture) {
-            alert('Please upload an image first!');
+            alert('Image is still loading, please wait...');
           }
           return;
         }
