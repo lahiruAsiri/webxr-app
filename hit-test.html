@@ -123,14 +123,11 @@
       let scene = new Scene();
       scene.enableStats(false);
 
-      let arObject = new Node();
-      arObject.visible = false;
-      scene.addNode(arObject);
-
       // Create plane node for PNG wall art
       function createImagePlaneNode(imageUrl) {
         const planeNode = new Node();
         planeNode.name = 'ImagePlane';
+        planeNode.visible = true; // Ensure visibility
         logDebug('Creating image plane node');
 
         // Create canvas for texture
@@ -193,7 +190,7 @@
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
         };
-        img.src = imageUrl; // Your PNG path
+        img.src = imageUrl;
 
         // Define plane geometry (0.5m x 0.5m, centered)
         const vertices = new Float32Array([
@@ -235,7 +232,9 @@
           varying vec2 vTexCoord;
           uniform sampler2D uTexture;
           void main() {
-            gl_FragColor = texture2D(uTexture, vTexCoord);
+            vec4 color = texture2D(uTexture, vTexCoord);
+            if (color.a < 0.1) discard;
+            gl_FragColor = color;
           }
         `;
 
@@ -271,8 +270,6 @@
         return planeNode;
       }
 
-      // Initialize plane node instead of GLTF
-      let wallArt = null;
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
       scene.addNode(reticle);
@@ -287,7 +284,7 @@
         posX: 0,
         posY: 0,
         posZ: 0,
-        rotX: 90, // Initial X rotation for wall alignment
+        rotX: 90,
         rotY: 0,
         rotZ: 0,
       };
@@ -328,10 +325,10 @@
 
         currentPoster.matrix = transformMatrix;
 
-        // Log position for debugging
+        // Log matrix for debugging
         let worldPos = vec3.create();
         mat4.getTranslation(worldPos, transformMatrix);
-        logDebug(`Poster position: [${worldPos[0].toFixed(3)}, ${worldPos[1].toFixed(3)}, ${worldPos[2].toFixed(3)}]`);
+        logDebug(`Poster transform updated: pos=[${worldPos[0].toFixed(3)}, ${worldPos[1].toFixed(3)}, ${worldPos[2].toFixed(3)}], scale=${controls.scale}`);
 
         // Update sliders
         document.getElementById('scale').value = controls.scale;
@@ -370,7 +367,7 @@
 
         const posterMatrix = currentPoster.matrix;
         const posterPosition = vec3.create();
-        const posterNormal = vec3.fromValues(0, 0, 1); // Plane faces +Z in local space
+        const posterNormal = vec3.fromValues(0, 0, 1);
         const worldNormal = vec3.create();
         mat4.getTranslation(posterPosition, posterMatrix);
         vec3.transformMat4(worldNormal, posterNormal, posterMatrix);
@@ -389,7 +386,11 @@
             mat4.invert(invMatrix, posterMatrix);
             const localPos = vec3.create();
             vec3.transformMat4(localPos, intersection, invMatrix);
-            return Math.abs(localPos[0]) <= 0.25 && Math.abs(localPos[1]) <= 0.25; // Match plane size (0.5m)
+            const hit = Math.abs(localPos[0]) <= 0.25 && Math.abs(localPos[1]) <= 0.25;
+            if (hit) {
+              logDebug(`Raycast hit: localPos=[${localPos[0].toFixed(3)}, ${localPos[1].toFixed(3)}]`);
+            }
+            return hit;
           }
         }
         return false;
@@ -547,7 +548,6 @@
               session.end();
               return;
             }
-            // Set global WebGL states
             gl.enable(gl.BLEND);
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
             gl.enable(gl.DEPTH_TEST);
@@ -560,12 +560,6 @@
             session.end();
             return;
           }
-
-          // Initialize wall art plane after WebGL context
-          wallArt = createImagePlaneNode('media/images/wallart.png');
-          wallArt.onLoad = () => logDebug('Wall art PNG initialized');
-          wallArt.onError = (error) => logDebug(`Error initializing wall art: ${error}`);
-          arObject.addNode(wallArt);
         }
 
         try {
@@ -653,14 +647,20 @@
         mat4.fromRotationTranslation(finalMatrix, rotation, position);
         mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
-        let newObject = arObject.clone();
-        newObject.visible = true;
-        currentPoster = newObject;
+        // Create new poster node
+        const newPoster = new Node();
+        newPoster.name = 'Poster';
+        newPoster.visible = true;
+        const newWallArt = createImagePlaneNode('media/images/wallart.png');
+        newWallArt.visible = true;
+        newPoster.addNode(newWallArt);
+        currentPoster = newPoster;
         baseMatrix = mat4.clone(finalMatrix);
 
         updatePosterTransform();
-        scene.addNode(newObject);
+        scene.addNode(newPoster);
 
+        logDebug(`Poster node added with ${newPoster.children.length} children, ${newWallArt.renderPrimitives.length} primitives`);
         logDebug('Poster placed successfully');
         document.getElementById('controls').style.display = 'block';
         document.getElementById('guidance').style.display = 'none';
@@ -704,6 +704,14 @@
               logDebug('Reticle visible on wall');
             }
           }
+        }
+
+        // Reset WebGL states before rendering
+        if (currentPoster) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+          gl.enable(gl.DEPTH_TEST);
+          gl.depthFunc(gl.LEQUAL);
         }
 
         scene.startFrame();
