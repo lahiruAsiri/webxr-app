@@ -104,6 +104,7 @@
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
       import {Ray} from './js/render/math/ray.js';
+      import {Material, Sampler, Texture} from './js/render/core/material.js';
 
       // Debugging system
       function logDebug(message) {
@@ -150,14 +151,37 @@
 
       // Touch interaction variables
       let isDragging = false;
-      let isPinching = false;
-      let lastTouchX = 0;
-      let lastTouchY = 0;
-      let initialPinchDistance = 0;
-      let initialPinchAngle = 0;
+      let isPinch = false;
+      // Define shaders for the textured plane
+      const vertexShaderSource = `
+        precision highp float;
+        attribute vec3 POSITION;
+        attribute vec2 TEXCOORD_0;
+        uniform mat4 PROJECTION_MATRIX;
+        uniform mat4 VIEW_MATRIX;
+        uniform mat4 MODEL_MATRIX;
+        varying vec2 vTexCoord;
+        void vertex_main(mat4 proj, mat4 view, mat4 model) {
+          vTexCoord = TEXCOORD_0;
+          gl_Position = proj * view * model * vec4(POSITION, 1.0);
+        }
+      `;
+
+      const fragmentShaderSource = `
+        precision highp float;
+        varying vec2 vTexCoord;
+        uniform sampler2D uTexture;
+        vec4 fragment_main() {
+          vec4 color = texture2D(uTexture, vTexCoord);
+          if (color.a < 0.1) discard; // Optional: discard low-alpha pixels
+          return color;
+        }
+      `;
 
       function createImagePlaneNode(imageUrl) {
-        const plane = new Node();
+        const planeNode = new Node();
+
+        // Create canvas for texture
         const canvas = document.createElement('canvas');
         canvas.width = 512;
         canvas.height = 512;
@@ -171,15 +195,23 @@
         ctx.textAlign = 'center';
         ctx.fillText('Loading...', canvas.width/2, canvas.height/2);
         
+        // Create WebGL texture
+        let texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        logDebug('WebGL texture created');
+
+        // Load image and update texture
         const img = new Image();
         img.crossOrigin = 'anonymous';
-        
         img.onload = function() {
           logDebug('Image loaded successfully');
-          // Calculate aspect ratio and draw centered
           const aspect = img.width / img.height;
           let drawWidth, drawHeight;
-          
           if (aspect > 1) {
             drawWidth = canvas.width;
             drawHeight = canvas.width / aspect;
@@ -187,24 +219,16 @@
             drawHeight = canvas.height;
             drawWidth = canvas.height * aspect;
           }
-          
           const x = (canvas.width - drawWidth) / 2;
           const y = (canvas.height - drawHeight) / 2;
-          
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, x, y, drawWidth, drawHeight);
-          
-          // Update texture
-          if (gl && texture) {
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-            logDebug('Texture updated with loaded image');
-          }
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+          logDebug('Texture updated with loaded image');
         };
-
         img.onerror = function() {
           logDebug('Image failed to load, using fallback');
-          // Create a colorful fallback pattern
           ctx.fillStyle = '#FF6B6B';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.fillStyle = '#4ECDC4';
@@ -215,27 +239,12 @@
           ctx.font = '32px Arial';
           ctx.textAlign = 'center';
           ctx.fillText('AR Artwork', canvas.width/2, canvas.height/2);
-          
-          if (gl && texture) {
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-          }
-        };
-
-        // Create WebGL texture
-        let texture = null;
-        if (gl) {
-          texture = gl.createTexture();
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-          logDebug('WebGL texture created');
-        }
+        };
+        img.src = imageUrl;
 
-        // Create geometry buffers
+        // Define geometry
         const vertices = new Float32Array([
           -0.5, -0.5, 0.0,  // bottom left
            0.5, -0.5, 0.0,  // bottom right
@@ -255,35 +264,34 @@
           0, 2, 3
         ]);
 
-        if (gl) {
-          const vertexBuffer = gl.createBuffer();
-          gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-          gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+        // Create material
+        const sampler = new Sampler({
+          minFilter: gl.LINEAR,
+          magFilter: gl.LINEAR,
+          wrapS: gl.CLAMP_TO_EDGE,
+          wrapT: gl.CLAMP_TO_EDGE
+        });
+        const textureObj = new Texture('planeTexture', texture, sampler);
+        const material = new Material('TexturedPlane', vertexShaderSource, fragmentShaderSource);
+        material.addSampler('uTexture', textureObj);
+        material.state.setBlend(true); // Enable blending for transparency
+        material.state.setDepthTest(true);
+        material.state.setCullFace(false); // Disable culling for visibility
 
-          const texCoordBuffer = gl.createBuffer();
-          gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-          gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
+        // Create mesh
+        const mesh = renderer.createSimpleMesh({}, {
+          positions: vertices,
+          texCoords: texCoords,
+          indices: indices
+        }, material);
 
-          const indexBuffer = gl.createBuffer();
-          gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-          gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+        // Create render primitive
+        const primitive = renderer.createPrimitiveFromMesh(mesh);
+        planeNode.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
 
-          // Store rendering data on the plane node
-          plane.renderData = {
-            texture: texture,
-            vertexBuffer: vertexBuffer,
-            texCoordBuffer: texCoordBuffer,
-            indexBuffer: indexBuffer,
-            indexCount: indices.length
-          };
+        logDebug('Plane geometry and material created');
 
-          logDebug('Plane geometry created');
-        }
-
-        // Load the image
-        img.src = imageUrl;
-        
-        return plane;
+        return planeNode;
       }
 
       function updatePosterTransform() {
@@ -321,6 +329,8 @@
         document.getElementById('rotX').value = controls.rotX;
         document.getElementById('rotY').value = controls.rotY;
         document.getElementById('rotZ').value = controls.rotZ;
+
+        logDebug(`Poster Matrix: ${transformMatrix}`);
       }
 
       function rayIntersectsPoster(touchX, touchY, canvas, pose) {
@@ -445,8 +455,6 @@
             toggleIcon.textContent = '+';
           }
         });
-
-        // Touch interaction setup will be added after canvas is available
       }
 
       function setupTouchInteraction() {
@@ -466,7 +474,7 @@
             lastTouchX = touchX;
             lastTouchY = touchY;
           } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
-            isPinching = true;
+            isPinch = true;
             const dx = e.touches[1].clientX - e.touches[0].clientX;
             const dy = e.touches[1].clientY - e.touches[0].clientY;
             initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
@@ -487,7 +495,7 @@
             lastTouchX = touchX;
             lastTouchY = touchY;
             updatePosterTransform();
-          } else if (isPinching && e.touches.length === 2) {
+          } else if (isPinch && e.touches.length === 2) {
             const dx = e.touches[1].clientX - e.touches[0].clientX;
             const dy = e.touches[1].clientY - e.touches[0].clientY;
             const currentDistance = Math.sqrt(dx * dx + dy * dy);
@@ -503,7 +511,7 @@
 
         canvas.addEventListener('touchend', (e) => {
           isDragging = false;
-          isPinching = false;
+          isPinch = false;
         });
 
         logDebug('Touch interaction setup complete');
@@ -539,6 +547,10 @@
               session.end();
               return;
             }
+            // Set WebGL states
+            gl.enable(gl.DEPTH_TEST);
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
             renderer = new Renderer(gl);
             scene.setRenderer(renderer);
             logDebug('WebGL context and renderer created');
@@ -551,7 +563,6 @@
 
         try {
           session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
-          // Setup touch interaction after WebGL context is ready
           setTimeout(setupTouchInteraction, 100);
         } catch (error) {
           alert(`XRWebGLLayer Error: ${error.message}`);
@@ -643,7 +654,6 @@
           let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
           mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
 
-          // Update this path to your actual image
           let newObject = createImagePlaneNode('https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/640px-PNG_transparency_demonstration_1.png');
           newObject.visible = true;
           currentPoster = newObject;
@@ -710,5 +720,3 @@
     </script>
   </body>
 </html>
-
-

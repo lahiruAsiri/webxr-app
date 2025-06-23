@@ -43,20 +43,10 @@ export const MAT_STATE = {
 };
 
 export const RENDER_ORDER = {
-  // Render opaque objects first.
   OPAQUE: 0,
-
-  // Render the sky after all opaque object to save fill rate.
   SKY: 1,
-
-  // Render transparent objects next so that the opaqe objects show through.
   TRANSPARENT: 2,
-
-  // Finally render purely additive effects like pointer rays so that they
-  // can render without depth mask.
   ADDITIVE: 3,
-
-  // Render order will be picked based on the material properties.
   DEFAULT: 4,
 };
 
@@ -202,7 +192,7 @@ export class MaterialState {
   }
 }
 
-class MaterialSampler {
+export class MaterialSampler {
   constructor(uniformName) {
     this._uniformName = uniformName;
     this._texture = null;
@@ -217,8 +207,8 @@ class MaterialSampler {
   }
 }
 
-class MaterialUniform {
-  constructor(uniformName, defaultValue, length) {
+export class MaterialUniform {
+  constructor(uniformName, defaultValue = null, length = 0) {
     this._uniformName = uniformName;
     this._value = defaultValue;
     this._length = length;
@@ -240,9 +230,62 @@ class MaterialUniform {
   }
 }
 
+export class Texture {
+  constructor(key, texture, sampler) {
+    this._key = key;
+    this._texture = texture;
+    this._sampler = sampler;
+  }
+
+  get textureKey() {
+    return this._key;
+  }
+
+  get format() {
+    return GL.RGBA;
+  }
+
+  get sampler() {
+    return this._sampler;
+  }
+
+  waitForComplete() {
+    return Promise.resolve(this);
+  }
+}
+
+export class Sampler {
+  constructor(params) {
+    this._params = params || {};
+  }
+
+  get minFilter() {
+    return this._params.minFilter || GL.LINEAR;
+  }
+
+  get magFilter() {
+    return this._params.magFilter || GL.LINEAR;
+  }
+
+  get wrapS() {
+    return this._params.wrapS || GL.CLAMP_TO_EDGE;
+  }
+
+  get wrapT() {
+    return this._params.wrapT || GL.CLAMP_TO_EDGE;
+  }
+
+  get mipmap() {
+    return false; // Disable mipmaps for simplicity
+  }
+}
+
 export class Material {
-  constructor() {
-    this.state = new MaterialState;
+  constructor(name, vertexSource, fragmentSource) {
+    this._name = name || 'UnnamedMaterial';
+    this._vertexSource = vertexSource || null;
+    this._fragmentSource = fragmentSource || null;
+    this.state = new MaterialState();
     this.renderOrder = RENDER_ORDER.DEFAULT;
     this._samplers = [];
     this._uniforms = [];
@@ -254,22 +297,28 @@ export class Material {
     return sampler;
   }
 
-  defineUniform(uniformName, defaultValue=null, length=0) {
+  addSampler(uniformName, texture) {
+    let sampler = this.defineSampler(uniformName);
+    sampler.texture = texture;
+    return sampler;
+  }
+
+  defineUniform(uniformName, defaultValue = null, length = 0) {
     let uniform = new MaterialUniform(uniformName, defaultValue, length);
     this._uniforms.push(uniform);
     return uniform;
   }
 
   get materialName() {
-    return null;
+    return this._name;
   }
 
   get vertexSource() {
-    return null;
+    return this._vertexSource;
   }
 
   get fragmentSource() {
-    return null;
+    return this._fragmentSource;
   }
 
   getProgramDefines(renderPrimitive) {
