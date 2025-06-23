@@ -18,9 +18,10 @@
         background: rgba(0, 0, 0, 0.7);
         color: white;
         padding: 10px 20px;
-        border-radius: 5px;
-        z-index: 1000;
-        font-family: Arial, sans-serif;
+        border-radius: 0px;
+        z-index: 1;
+        font-family: monospace;
+        font-size: 12px;
         display: none;
       }
       #debug {
@@ -29,21 +30,32 @@
         left: 0;
         background: rgba(0,0,0,0.7);
         color: white;
-        padding: 10px;
-        z-index: 1000;
+        padding: 4px;
+        z-index: 1;
         font-family: monospace;
-        font-size: 14px;
+        font-size: 10px;
         max-width: 100%;
         overflow: auto;
         max-height: 100px;
       }
+      .back {
+        position: fixed;
+        top: 4px;
+        right: 4px;
+        background: none;
+        color: black;
+        padding: 4px 8px;
+        z-index: 0;
+        font-family: monospace;
+        font-size: 12px;
+      }
     </style>
-    <title>AR Wall Art</title>
+    <title>Arrow AR Art</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>AR Wall Art</summary>
+        <summary>Arrow AR Art</summary>
         <p>
           Point at a wall to see the blue reticle, then tap to place your artwork. 
           Use controls to adjust position and rotation.
@@ -152,6 +164,11 @@
       // Touch interaction variables
       let isDragging = false;
       let isPinch = false;
+      let lastTouchX = 0;
+      let lastTouchY = 0;
+      let initialPinchDistance = 0;
+      let initialPinchAngle = 0;
+
       // Define shaders for the textured plane
       const vertexShaderSource = `
         precision highp float;
@@ -173,13 +190,14 @@
         uniform sampler2D uTexture;
         vec4 fragment_main() {
           vec4 color = texture2D(uTexture, vTexCoord);
-          if (color.a < 0.1) discard; // Optional: discard low-alpha pixels
+          if (color.a < 0.1) discard; // Discard low-alpha pixels for transparency
           return color;
         }
       `;
 
       function createImagePlaneNode(imageUrl) {
         const planeNode = new Node();
+        planeNode.name = 'ImagePlane'; // For debugging
 
         // Create canvas for texture
         const canvas = document.createElement('canvas');
@@ -274,9 +292,15 @@
         const textureObj = new Texture('planeTexture', texture, sampler);
         const material = new Material('TexturedPlane', vertexShaderSource, fragmentShaderSource);
         material.addSampler('uTexture', textureObj);
-        material.state.setBlend(true); // Enable blending for transparency
-        material.state.setDepthTest(true);
-        material.state.setCullFace(false); // Disable culling for visibility
+        
+        // Set material states using property setters
+        material.state.blend = true;
+        material.state.depthTest = true;
+        material.state.cullFace = false;
+        material.state.blendFuncSrc = gl.SRC_ALPHA;
+        material.state.blendFuncDst = gl.ONE_MINUS_SRC_ALPHA;
+        
+        logDebug(`Material states set: blend=${material.state.blend}, depthTest=${material.state.depthTest}, cullFace=${material.state.cullFace}`);
 
         // Create mesh
         const mesh = renderer.createSimpleMesh({}, {
@@ -289,7 +313,7 @@
         const primitive = renderer.createPrimitiveFromMesh(mesh);
         planeNode.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
 
-        logDebug('Plane geometry and material created');
+        logDebug(`Plane geometry and material created, renderPrimitives: ${planeNode.renderPrimitives.length}`);
 
         return planeNode;
       }
@@ -330,7 +354,7 @@
         document.getElementById('rotY').value = controls.rotY;
         document.getElementById('rotZ').value = controls.rotZ;
 
-        logDebug(`Poster Matrix: ${transformMatrix}`);
+        logDebug(`Poster Matrix: [${transformMatrix.join(', ')}]`);
       }
 
       function rayIntersectsPoster(touchX, touchY, canvas, pose) {
