@@ -5,11 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png" />
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      body { margin: 0; }
+      body { margin: 0; overflow: hidden; }
       #guidance {
         position: fixed;
         top: 50%;
@@ -21,7 +18,6 @@
         border-radius: 10px;
         z-index: 1000;
         font-family: Arial, sans-serif;
-        display: none;
       }
       #debug {
         position: fixed;
@@ -37,87 +33,14 @@
         overflow: auto;
         max-height: 150px;
       }
-      .back {
-        position: fixed;
-        top: 4px;
-        right: 4px;
-        background: none;
-        color: black;
-        padding: 4px 8px;
-        z-index: 1000;
-        font-family: monospace;
-        font-size: 12px;
-      }
     </style>
-    <title>AR Wall Art</title>
+    <title>AR Wall Art (Three.js)</title>
   </head>
   <body>
-    <header>
-      <details open>
-        <summary>AR Wall Art</summary>
-        <p>
-          Point at a wall to see the blue reticle, then tap to place your artwork.
-          Use controls to adjust position and rotation.
-          <a class="back" href="./">Back</a>
-        </p>
-      </details>
-    </header>
     <div id="guidance">Point at a wall to place your artwork.</div>
     <div id="debug"></div>
-
-    <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none">
-      <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
-        <span id="toggleIcon">-</span>
-      </button>
-      <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
-        <h3 class="text-lg font-semibold text-gray-800 mb-4">Artwork Controls</h3>
-        <div class="space-y-4">
-          <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Size:</label>
-            <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-blue-600" />
-          </div>
-          <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">X Position:</label>
-            <input type="range" id="posX" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600" />
-          </div>
-          <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Y Position:</label>
-            <input type="range" id="posY" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600" />
-          </div>
-          <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Z Position:</label>
-            <input type="range" id="posZ" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600" />
-          </div>
-          <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">X Rotation:</label>
-            <input type="range" id="rotX" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600" />
-          </div>
-          <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Y Rotation:</label>
-            <input type="range" id="rotY" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600" />
-          </div>
-          <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
-            <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600" />
-          </div>
-          <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
-            Remove Artwork
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <script type="module">
-      import { WebXRButton } from './js/util/webxr-button.js';
-      import { Scene } from './js/render/scenes/scene.js';
-      import { Renderer, createWebGLContext } from './js/render/core/renderer.js';
-      import { Node } from './js/render/core/node.js';
-      import { Gltf2Node } from './js/render/nodes/gltf2.js';
-      import { vec3, mat4, quat } from './js/render/math/gl-matrix.js';
-      import { Ray } from './js/render/math/ray.js';
-      import { Material, Sampler, Texture } from './js/render/core/material.js';
-
-      // Debugging system
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script>
       function logDebug(message) {
         console.log('[DEBUG]', message);
         const debugDiv = document.getElementById('debug');
@@ -125,656 +48,88 @@
         debugDiv.scrollTop = debugDiv.scrollHeight;
       }
 
-      // XR globals
-      let xrButton = null;
-      let xrRefSpace = null;
-      let xrViewerSpace = null;
-      let xrHitTestSource = null;
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
 
-      // WebGL scene globals
-      let gl = null;
-      let renderer = null;
-      let scene = new Scene();
-      scene.enableStats(false);
-
-      let arObject = new Node();
-      arObject.visible = false;
-      scene.addNode(arObject);
-
-      let reticle = new Gltf2Node({ url: 'media/gltf/reticle/reticle.gltf' });
+      let reticle = new THREE.Mesh(
+        new THREE.RingGeometry(0.05, 0.06, 32),
+        new THREE.MeshBasicMaterial({ color: 0x0000ff })
+      );
       reticle.visible = false;
-      scene.addNode(reticle);
+      scene.add(reticle);
 
-      scene.clear = false;
+      let poster = null;
+      let xrSession = null;
+      let hitTestSource = null;
+      let referenceSpace = null;
 
-      // Artwork management
-      let currentPoster = null;
-      let baseMatrix = mat4.create();
-      let controls = {
-        scale: 0.5,
-        posX: 0,
-        posY: 0,
-        posZ: 0,
-        rotX: 0,
-        rotY: 0,
-        rotZ: 0,
-      };
-
-      // Touch interaction variables
-      let isDragging = false;
-      let isPinch = false;
-      let lastTouchX = 0;
-      let lastTouchY = 0;
-      let initialPinchDistance = 0;
-      let initialPinchAngle = 0;
-
-      // Define simplified shaders
-      const vertexShaderSource = `
-        precision highp float;
-        attribute vec3 a_position;
-        attribute vec2 a_texcoord;
-        uniform mat4 u_projectionMatrix;
-        uniform mat4 u_viewMatrix;
-        uniform mat4 u_modelMatrix;
-        varying vec2 v_texCoord;
-        void main() {
-          v_texCoord = a_texcoord;
-          gl_Position = u_projectionMatrix * u_viewMatrix * u_modelMatrix * vec4(a_position, 1.0);
-        }
-      `;
-
-      const fragmentShaderSource = `
-        precision highp float;
-        varying vec2 v_texCoord;
-        uniform sampler2D u_texture;
-        void main() {
-          gl_FragColor = texture2D(u_texture, v_texCoord);
-          // gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); // Uncomment for solid red test
-        }
-      `;
-
-      function createImagePlaneNode(imageUrl) {
-        const planeNode = new Node();
-        planeNode.name = 'ImagePlane';
-
-        // Create canvas for texture
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
-        const ctx = canvas.getContext('2d');
-
-        ctx.fillStyle = '#4A90E2';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '48px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Loading...', canvas.width / 2, canvas.height / 2);
-
-        // Create WebGL texture
-        let texture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        logDebug('WebGL texture created');
-
-        // Load image and update texture
-        const img = new Image();
-        img.onload = function () {
-          logDebug('Image loaded successfully');
-          const aspect = img.width / img.height;
-          let drawWidth, drawHeight;
-          if (aspect > 1) {
-            drawWidth = canvas.width;
-            drawHeight = canvas.width / aspect;
-          } else {
-            drawHeight = canvas.height;
-            drawWidth = canvas.height * aspect;
-          }
-          const x = (canvas.width - drawWidth) / 2;
-          const y = (canvas.height - drawHeight) / 2;
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, x, y, drawWidth, drawHeight);
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D, texture);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-          logDebug('Texture updated with loaded image');
-        };
-        img.onerror = function () {
-          logDebug('Image failed to load, using fallback');
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = '#FF6B6B';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = '#FFFFFF';
-          ctx.font = '32px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText('Failed', canvas.width / 2, canvas.height / 2);
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D, texture);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-        };
-        img.src = imageUrl; // e.g., 'media/images/test.png'
-
-        // Define geometry
-        const vertices = new Float32Array([
-          -0.5, -0.5, 0.0, // bottom left
-          0.5, -0.5, 0.0, // bottom right
-          0.5, 0.5, 0.0, // top right
-          -0.5, 0.5, 0.0, // top left
-        ]);
-
-        const texCoords = new Float32Array([
-          0.0, 1.0, // bottom left
-          1.0, 1.0, // bottom right
-          1.0, 0.0, // top right
-          0.0, 0.0, // top left
-        ]);
-
-        const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
-
-        // Create material
-        const sampler = new Sampler({
-          minFilter: gl.LINEAR,
-          magFilter: gl.LINEAR,
-          wrapS: gl.CLAMP_TO_EDGE,
-          wrapT: gl.CLAMP_TO_EDGE,
-        });
-        const textureObj = new Texture('planeTexture', texture, sampler);
-        const material = new Material('TexturedPlane', vertexShaderSource, fragmentShaderSource);
-        material.addSampler('u_texture', textureObj);
-
-        material.state.blend = true;
-        material.state.depthTest = true;
-        material.state.cullFace = false;
-        material.state.blendFuncSrc = gl.SRC_ALPHA;
-        material.state.blendFuncDst = gl.ONE_MINUS_SRC_ALPHA;
-
-        logDebug(`Material states set: blend=${material.state.blend}, depthTest=${material.state.depthTest}, cullFace=${material.state.cullFace}`);
-
-        // Create and compile shaders for debugging
-        const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-        gl.shaderSource(vertexShader, vertexShaderSource);
-        gl.compileShader(vertexShader);
-        if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
-          logDebug(`Vertex shader compilation error: ${gl.getShaderInfoLog(vertexShader)}`);
-          return null;
-        }
-
-        const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-        gl.shaderSource(fragmentShader, fragmentShaderSource);
-        gl.compileShader(fragmentShader);
-        if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
-          logDebug(`Fragment shader compilation error: ${gl.getShaderInfoLog(fragmentShader)}`);
-          return null;
-        }
-
-        const program = gl.createProgram();
-        gl.attachShader(program, vertexShader);
-        gl.attachShader(program, fragmentShader);
-        gl.linkProgram(program);
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-          logDebug(`Program linking error: ${gl.getProgramInfoLog(program)}`);
-          return null;
-        }
-
-        // Log attribute and uniform locations
-        const positionLoc = gl.getAttribLocation(program, 'a_position');
-        const texCoordLoc = gl.getAttribLocation(program, 'a_texcoord');
-        const projMatrixLoc = gl.getUniformLocation(program, 'u_projectionMatrix');
-        const viewMatrixLoc = gl.getUniformLocation(program, 'u_viewMatrix');
-        const modelMatrixLoc = gl.getUniformLocation(program, 'u_modelMatrix');
-        const textureLoc = gl.getUniformLocation(program, 'u_texture');
-        logDebug(
-          `Shader bindings: a_position=${positionLoc}, a_texcoord=${texCoordLoc}, u_projectionMatrix=${projMatrixLoc}, u_viewMatrix=${viewMatrixLoc}, u_modelMatrix=${modelMatrixLoc}, u_texture=${textureLoc}`,
-        );
-
-        // Explicitly set texture unit
-        gl.useProgram(program);
-        gl.uniform1i(textureLoc, 0);
-        gl.useProgram(null);
-
-        // Create mesh
-        const mesh = renderer.createSimpleMesh({}, { positions: vertices, texCoords: texCoords, indices: indices }, material);
-
-        // Create render primitive
-        const primitive = renderer.createPrimitiveFromMesh(mesh);
-        planeNode.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
-
-        logDebug(`Plane geometry and material created, renderPrimitives: ${planeNode.renderPrimitives.length}`);
-
-        return planeNode;
-      }
-
-      function updatePosterTransform() {
-        if (!currentPoster) return;
-
-        let matrix = mat4.clone(baseMatrix);
-        let position = vec3.create();
-        let rotation = quat.create();
-        mat4.getTranslation(position, matrix);
-        mat4.getRotation(rotation, matrix);
-
-        // Apply position offsets
-        let offset = vec3.fromValues(controls.posX, controls.posY, controls.posZ);
-        vec3.add(position, position, offset);
-
-        // Apply user rotations
-        let userRotation = quat.create();
-        quat.fromEuler(userRotation, controls.rotX, controls.rotY, controls.rotZ);
-        quat.multiply(rotation, rotation, userRotation);
-
-        // Apply scale
-        let scaleMatrix = mat4.create();
-        mat4.fromScaling(scaleMatrix, [controls.scale, controls.scale, controls.scale]);
-        let transformMatrix = mat4.create();
-        mat4.fromRotationTranslation(transformMatrix, rotation, position);
-        mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
-
-        currentPoster.matrix = transformMatrix;
-
-        // Log world position
-        let worldPos = vec3.create();
-        mat4.getTranslation(worldPos, transformMatrix);
-        logDebug(`Poster World Position: [${worldPos[0]}, ${worldPos[1]}, ${worldPos[2]}]`);
-
-        // Update sliders
-        document.getElementById('scale').value = controls.scale;
-        document.getElementById('posX').value = controls.posX;
-        document.getElementById('posY').value = controls.posY;
-        document.getElementById('posZ').value = controls.posZ;
-        document.getElementById('rotX').value = controls.rotX;
-        document.getElementById('rotY').value = controls.rotY;
-        document.getElementById('rotZ').value = controls.rotZ;
-
-        logDebug(`Poster Matrix: [${transformMatrix.join(', ')}]`);
-      }
-
-      function rayIntersectsPoster(touchX, touchY, canvas, pose) {
-        if (!currentPoster || !pose) return false;
-
-        const rect = canvas.getBoundingClientRect();
-        const ndcX = (2.0 * touchX - rect.width) / rect.width;
-        const ndcY = (rect.height - 2.0 * touchY) / rect.height;
-
-        const projectionMatrix = mat4.create();
-        const fov = 60 * Math.PI / 180;
-        mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
-        const viewMatrix = pose.views[0].transform.inverse.matrix;
-
-        const rayOrigin = vec3.create();
-        const rayEnd = vec3.fromValues(ndcX, ndcY, -1);
-        const rayOriginView = vec3.fromValues(ndcX, ndcY, -1);
-        const rayEndView = vec3.fromValues(ndcX, ndcY, 1);
-        mat4.invert(projectionMatrix, projectionMatrix);
-        vec3.transformMat4(rayOriginView, rayOriginView, projectionMatrix);
-        vec3.transformMat4(rayEndView, rayEndView, projectionMatrix);
-        vec3.transformMat4(rayOrigin, rayOriginView, viewMatrix);
-        vec3.transformMat4(rayEnd, rayEndView, viewMatrix);
-        const rayDirection = vec3.create();
-        vec3.subtract(rayDirection, rayEnd, rayOrigin);
-        vec3.normalize(rayDirection, rayDirection);
-
-        const posterMatrix = currentPoster.matrix;
-        const posterPosition = vec3.create();
-        const posterNormal = vec3.fromValues(0, 0, 1);
-        const worldNormal = vec3.create();
-        mat4.getTranslation(posterPosition, posterMatrix);
-        vec3.transformMat4(worldNormal, posterNormal, posterMatrix);
-        vec3.subtract(worldNormal, worldNormal, posterPosition);
-        vec3.normalize(worldNormal, worldNormal);
-
-        const denom = vec3.dot(worldNormal, rayDirection);
-        if (Math.abs(denom) > 0.0001) {
-          const toPlane = vec3.create();
-          vec3.subtract(toPlane, posterPosition, rayOrigin);
-          const t = vec3.dot(toPlane, worldNormal) / denom;
-          if (t >= 0) {
-            const intersection = vec3.create();
-            vec3.scaleAndAdd(intersection, rayOrigin, rayDirection, t);
-            const invMatrix = mat4.create();
-            mat4.invert(invMatrix, posterMatrix);
-            const localPos = vec3.create();
-            vec3.transformMat4(localPos, intersection, invMatrix);
-            return Math.abs(localPos[0]) <= 0.5 && Math.abs(localPos[1]) <= 0.5;
-          }
-        }
-        return false;
-      }
-
-      function initXR() {
-        xrButton = new WebXRButton({
-          onRequestSession: onRequestSession,
-          onEndSession: onEndSession,
-          textEnterXRTitle: 'START AR',
-          textXRNotFoundTitle: 'AR NOT FOUND',
-          textExitXRTitle: 'EXIT AR',
-        });
-        document.querySelector('header').appendChild(xrButton.domElement);
-
-        if (navigator.xr) {
-          navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-            xrButton.enabled = supported;
-          });
-        }
-
-        // Control listeners
-        document.getElementById('scale').addEventListener('input', (e) => {
-          controls.scale = parseFloat(e.target.value);
-          updatePosterTransform();
-        });
-        document.getElementById('posX').addEventListener('input', (e) => {
-          controls.posX = parseFloat(e.target.value);
-          updatePosterTransform();
-        });
-        document.getElementById('posY').addEventListener('input', (e) => {
-          controls.posY = parseFloat(e.target.value);
-          updatePosterTransform();
-        });
-        document.getElementById('posZ').addEventListener('input', (e) => {
-          controls.posZ = parseFloat(e.target.value);
-          updatePosterTransform();
-        });
-        document.getElementById('rotX').addEventListener('input', (e) => {
-          controls.rotX = parseFloat(e.target.value);
-          updatePosterTransform();
-        });
-        document.getElementById('rotY').addEventListener('input', (e) => {
-          controls.rotY = parseFloat(e.target.value);
-          updatePosterTransform();
-        });
-        document.getElementById('rotZ').addEventListener('input', (e) => {
-          controls.rotZ = parseFloat(e.target.value);
-          updatePosterTransform();
-        });
-        document.getElementById('removePoster').addEventListener('click', () => {
-          if (currentPoster) {
-            scene.removeNode(currentPoster);
-            currentPoster = null;
-            document.getElementById('controls').style.display = 'none';
-            document.getElementById('guidance').style.display = 'block';
-            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
-            updatePosterTransform();
-          }
-        });
-
-        document.getElementById('toggleControls').addEventListener('click', () => {
-          const controlsPanel = document.getElementById('controlsPanel');
-          const toggleIcon = document.getElementById('toggleIcon');
-          if (controlsPanel.style.display === 'none') {
-            controlsPanel.style.display = 'block';
-            toggleIcon.textContent = '-';
-          } else {
-            controlsPanel.style.display = 'none';
-            toggleIcon.textContent = '+';
-          }
-        });
-      }
-
-      function setupTouchInteraction() {
-        const canvas = document.querySelector('canvas');
-        if (!canvas) {
-          logDebug('Canvas not found for touch interaction');
-          return;
-        }
-
-        canvas.addEventListener('touchstart', (e) => {
-          if (!currentPoster || !lastPose) return;
-          e.preventDefault();
-          const touchX = e.touches[0].clientX;
-          const touchY = e.touches[0].clientY;
-          if (e.touches.length === 1 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
-            isDragging = true;
-            lastTouchX = touchX;
-            lastTouchY = touchY;
-          } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
-            isPinch = true;
-            const dx = e.touches[1].clientX - e.touches[0].clientX;
-            const dy = e.touches[1].clientY - e.touches[0].clientY;
-            initialPinchAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-            initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
-          }
-        });
-
-        canvas.addEventListener('touchmove', (e) => {
-          if (!currentPoster) return;
-          e.preventDefault();
-          if (isDragging && e.touches.length === 1) {
-            const touchX = e.touches[0].clientX;
-            const touchY = e.touches[0].clientY;
-            const deltaX = touchX - lastTouchX;
-            const deltaY = touchY - lastTouchY;
-            controls.rotY += deltaX * 0.5;
-            controls.rotX += deltaY * 0.5;
-            lastTouchX = touchX;
-            lastTouchY = touchY;
-            updatePosterTransform();
-          } else if (isPinch && e.touches.length === 2) {
-            const dx = e.touches[1].clientX - e.touches[0].clientX;
-            const dy = e.touches[1].clientY - e.touches[0].clientY;
-            const currentDistance = Math.sqrt(dx * dx + dy * dy);
-            const currentAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-            const scaleChange = currentDistance / initialPinchDistance;
-            controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
-            controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
-            initialPinchDistance = currentDistance;
-            initialPinchAngle = currentAngle;
-            updatePosterTransform();
-          }
-        });
-
-        canvas.addEventListener('touchend', () => {
-          isDragging = false;
-          isPinch = false;
-        });
-
-        logDebug('Touch interaction setup complete');
-      }
-
-      function onRequestSession() {
-        return navigator.xr
-          .requestSession('immersive-ar', {
-            requiredFeatures: ['local', 'dom-overlay'],
-            optionalFeatures: ['hit-test'],
+      async function startXR() {
+        try {
+          xrSession = await navigator.xr.requestSession('immersive-ar', {
+            requiredFeatures: ['local', 'hit-test'],
             domOverlay: { root: document.body },
-          })
-          .then((session) => {
-            xrButton.setSession(session);
-            onSessionStarted(session);
-          })
-          .catch((error) => {
-            logDebug(`AR Session Error: ${error.message}`);
           });
-      }
-
-      let lastPose = null;
-      function onSessionStarted(session) {
-        session.addEventListener('end', onSessionEnded);
-        session.addEventListener('select', onSelect);
-
-        try {
-          gl = createWebGLContext({
-            xrCompatible: true,
-            alpha: true,
-            preserveDrawingBuffer: true,
-          });
-          if (!gl) {
-            throw new Error('Failed to create WebGL context');
-          }
-          // Set global WebGL states
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-          gl.enable(gl.DEPTH_TEST);
-          gl.depthFunc(gl.LEQUAL);
-          renderer = new Renderer(gl);
-          scene.setRenderer(renderer);
-          logDebug('WebGL context and renderer created');
+          renderer.xr.setSession(xrSession);
+          referenceSpace = await xrSession.requestReferenceSpace('local');
+          hitTestSource = await xrSession.requestHitTestSource({ space: await xrSession.requestReferenceSpace('viewer') });
+          document.getElementById('guidance').style.display = 'block';
+          logDebug('XR session started');
+          animate();
         } catch (error) {
-          logDebug(`WebGL Error: ${error.message}`);
-          session.end();
-          return;
-        }
-
-        try {
-          session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
-          setTimeout(setupTouchInteraction, 100);
-        } catch (error) {
-          logDebug(`XRWebGLLayer Error: ${error.message}`);
-          session.end();
-          return;
-        }
-
-        session.requestReferenceSpace('viewer').then((refSpace) => {
-          xrViewerSpace = refSpace;
-          session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
-            xrHitTestSource = hitTestSource;
-            logDebug('Hit test source created');
-          });
-        });
-
-        session.requestReferenceSpace('local').then((refSpace) => {
-          xrRefSpace = refSpace;
-          session.requestAnimationFrame(onXRFrame);
-          logDebug('XR session started successfully');
-        });
-
-        document.getElementById('guidance').style.display = 'block';
-      }
-
-      function onEndSession(session) {
-        if (xrHitTestSource) {
-          xrHitTestSource.cancel();
-          xrHitTestSource = null;
-        }
-        session.end();
-      }
-
-      function onSessionEnded() {
-        xrButton.setSession(null);
-        logDebug('XR session ended');
-      }
-
-      function addARObjectAt(matrix) {
-        if (currentPoster) return;
-
-        logDebug('Attempting to place artwork');
-        try {
-          let hitMatrix = mat4.clone(matrix);
-          let position = vec3.create();
-          let rotation = quat.create();
-          mat4.getTranslation(position, hitMatrix);
-          mat4.getRotation(rotation, hitMatrix);
-
-          let upVector = vec3.fromValues(0, 1, 0);
-          vec3.transformQuat(upVector, upVector, rotation);
-          vec3.normalize(upVector, upVector);
-
-          let surfaceNormal = vec3.create();
-          let surfaceType = '';
-          if (Math.abs(upVector[1]) > 0.7) {
-            surfaceNormal = vec3.clone(upVector);
-            surfaceType = 'Floor';
-          } else {
-            let viewerForward = vec3.fromValues(0, 0, -1);
-            vec3.transformQuat(viewerForward, viewerForward, rotation);
-            surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
-            vec3.normalize(surfaceNormal, surfaceNormal);
-            vec3.negate(surfaceNormal, surfaceNormal);
-            surfaceType = 'Wall';
-          }
-
-          if (surfaceType !== 'Wall') {
-            logDebug('Not placing on wall surface');
-            return;
-          }
-
-          let modelZ = vec3.fromValues(0, 0, -1);
-          let alignRotation = quat.create();
-          quat.rotationTo(alignRotation, modelZ, surfaceNormal);
-
-          let finalMatrix = mat4.create();
-          let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01);
-          vec3.add(position, position, offset);
-          mat4.fromRotationTranslation(finalMatrix, rotation, position);
-          mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
-
-          // Move closer to camera
-          let translateMatrix = mat4.create();
-          mat4.fromTranslation(translateMatrix, [0, 0, -0.3]);
-          mat4.multiply(finalMatrix, finalMatrix, translateMatrix);
-
-          let newObject = createImagePlaneNode('media/images/wallart.png'); // Replace with your local PNG path
-          if (!newObject) {
-            logDebug('Failed to create plane node');
-            return;
-          }
-          newObject.visible = true;
-          currentPoster = newObject;
-          baseMatrix = mat4.clone(finalMatrix);
-
-          updatePosterTransform();
-          scene.addNode(newObject);
-
-          logDebug('Artwork placed successfully');
-          logDebug(`Scene children: ${scene.children.length}`);
-          logDebug(`Scene children names: ${scene.children.map((n) => n.name || 'unnamed').join(', ')}`);
-
-          document.getElementById('controls').style.display = 'block';
-          document.getElementById('guidance').style.display = 'none';
-        } catch (error) {
-          logDebug(`Error placing artwork: ${error.message}`);
-          console.error(error);
+          logDebug(`XR Error: ${error.message}`);
         }
       }
 
-      function onSelect(event) {
-        if (reticle.visible) {
-          addARObjectAt(reticle.matrix);
-        }
-      }
+      function animate() {
+        renderer.setAnimationLoop((time, frame) => {
+          if (!frame) return;
 
-      function onXRFrame(t, frame) {
-        let session = frame.session;
-        let pose = frame.getViewerPose(xrRefSpace);
-        lastPose = pose;
+          const pose = frame.getViewerPose(referenceSpace);
+          reticle.visible = false;
 
-        reticle.visible = false;
-        document.getElementById('guidance').style.display = currentPoster ? 'none' : 'block';
-
-        if (xrHitTestSource && pose && !currentPoster) {
-          let hitTestResults = frame.getHitTestResults(xrHitTestSource);
-          if (hitTestResults.length > 0) {
-            let hitPose = hitTestResults[0].getPose(xrRefSpace);
-            let hitMatrix = hitPose.transform.matrix;
-            let position = vec3.create();
-            let rotation = quat.create();
-            mat4.getTranslation(position, hitMatrix);
-            mat4.getRotation(rotation, hitMatrix);
-
-            let upVector = vec3.fromValues(0, 1, 0);
-            vec3.transformQuat(upVector, upVector, rotation);
-            vec3.normalize(upVector, upVector);
-
-            let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
-
-            if (surfaceType === 'Wall') {
+          if (hitTestSource && pose && !poster) {
+            const hitTestResults = frame.getHitTestResults(hitTestSource);
+            if (hitTestResults.length) {
+              const hit = hitTestResults[0].getPose(referenceSpace);
+              reticle.matrix.fromArray(hit.transform.matrix);
+              reticle.matrix.decompose(reticle.position, reticle.quaternion, reticle.scale);
               reticle.visible = true;
-              reticle.matrix = hitMatrix;
               document.getElementById('guidance').style.display = 'none';
             }
           }
-        }
 
-        scene.startFrame();
-        logDebug('Rendering frame');
-        session.requestAnimationFrame(onXRFrame);
-        scene.drawXRFrame(frame, pose);
-        scene.endFrame();
+          renderer.render(scene, camera);
+        });
       }
 
-      initXR();
+      function placePoster() {
+        if (reticle.visible && !poster) {
+          const geometry = new THREE.PlaneGeometry(0.5, 0.5);
+          const texture = new THREE.TextureLoader().load('media/images/wallart.png', () => {
+            logDebug('Image loaded successfully');
+          });
+          const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            side: THREE.DoubleSide,
+          });
+          poster = new THREE.Mesh(geometry, material);
+          poster.position.copy(reticle.position);
+          poster.quaternion.copy(reticle.quaternion);
+          scene.add(poster);
+          document.getElementById('guidance').style.display = 'none';
+          logDebug('Poster placed');
+        }
+      }
+
+      renderer.domElement.addEventListener('click', placePoster);
+
+      document.body.innerHTML += '<button style="position: fixed; top: 10px; left: 10px; z-index: 1000;">Start AR</button>';
+      document.querySelector('button').addEventListener('click', startXR);
     </script>
   </body>
 </html>
