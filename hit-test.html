@@ -127,7 +127,7 @@
       function createImagePlaneNode(imageUrl) {
         const planeNode = new Node();
         planeNode.name = 'ImagePlane';
-        planeNode.visible = true; // Ensure visibility
+        planeNode.visible = true;
         logDebug('Creating image plane node');
 
         // Create canvas for texture
@@ -136,13 +136,13 @@
         canvas.height = 512;
         const ctx = canvas.getContext('2d');
 
-        // Fallback texture
-        ctx.fillStyle = '#FF6B6B';
+        // Fallback texture (red for visibility testing)
+        ctx.fillStyle = '#FF0000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#FFFFFF';
         ctx.font = '48px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Loading...', canvas.width / 2, canvas.height / 2);
+        ctx.fillText('TEST', canvas.width / 2, canvas.height / 2);
 
         // Create WebGL texture
         let texture = gl.createTexture();
@@ -157,14 +157,13 @@
 
         // Load PNG image
         const img = new Image();
+        img.crossOrigin = 'anonymous'; // Ensure CORS compatibility
         img.onload = function () {
           logDebug('Image loaded successfully');
           const aspect = img.width / img.height;
-          let drawWidth, drawHeight;
-          if (aspect > 1) {
-            drawWidth = canvas.width;
-            drawHeight = canvas.width / aspect;
-          } else {
+          let drawWidth = canvas.width;
+          let drawHeight = canvas.height / aspect;
+          if (aspect < 1) {
             drawHeight = canvas.height;
             drawWidth = canvas.height * aspect;
           }
@@ -175,6 +174,7 @@
           gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+          gl.generateMipmap(gl.TEXTURE_2D); // Add mipmaps for better rendering
           logDebug('Texture updated with loaded image');
         };
         img.onerror = function () {
@@ -233,14 +233,35 @@
           uniform sampler2D uTexture;
           void main() {
             vec4 color = texture2D(uTexture, vTexCoord);
-            if (color.a < 0.1) discard;
+            if (color.a < 0.1) discard; // Discard low-alpha pixels
             gl_FragColor = color;
           }
         `;
 
+        // Add shader compilation logging
+        const vs = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, vertexShader);
+        gl.compileShader(vs);
+        if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+          logDebug(`Vertex shader error: ${gl.getShaderInfoLog(vs)}`);
+        }
+        const fs = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, fragmentShader);
+        gl.compileShader(fs);
+        if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+          logDebug(`Fragment shader error: ${gl.getShaderInfoLog(fs)}`);
+        }
+        const program = gl.createProgram();
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        gl.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          logDebug(`Program link error: ${gl.getProgramInfoLog(program)}`);
+        }
+
         // Create material
         const sampler = new Sampler({
-          minFilter: gl.LINEAR,
+          minFilter: gl.LINEAR_MIPMAP_LINEAR, // Use mipmaps
           magFilter: gl.LINEAR,
           wrapS: gl.CLAMP_TO_EDGE,
           wrapT: gl.CLAMP_TO_EDGE,
@@ -386,7 +407,7 @@
             mat4.invert(invMatrix, posterMatrix);
             const localPos = vec3.create();
             vec3.transformMat4(localPos, intersection, invMatrix);
-            const hit = Math.abs(localPos[0]) <= 0.25 && Math.abs(localPos[1]) <= 0.25;
+            const hit = Math.abs(localPos[0]) <= 0.25 * controls.scale && Math.abs(localPos[1]) <= 0.25 * controls.scale;
             if (hit) {
               logDebug(`Raycast hit: localPos=[${localPos[0].toFixed(3)}, ${localPos[1].toFixed(3)}]`);
             }
@@ -654,16 +675,17 @@
         const newWallArt = createImagePlaneNode('media/images/wallart.png');
         newWallArt.visible = true;
         newPoster.addNode(newWallArt);
+        newPoster.matrix = finalMatrix; // Set initial matrix
         currentPoster = newPoster;
         baseMatrix = mat4.clone(finalMatrix);
 
-        updatePosterTransform();
         scene.addNode(newPoster);
-
         logDebug(`Poster node added with ${newPoster.children.length} children, ${newWallArt.renderPrimitives.length} primitives`);
-        logDebug('Poster placed successfully');
+        logDebug(`Poster placed successfully at pos=[${position[0].toFixed(3)}, ${position[1].toFixed(3)}, ${position[2].toFixed(3)}]`);
+
         document.getElementById('controls').style.display = 'block';
         document.getElementById('guidance').style.display = 'none';
+        updatePosterTransform();
       }
 
       function onSelect(event) {
@@ -707,12 +729,13 @@
         }
 
         // Reset WebGL states before rendering
-        if (currentPoster) {
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-          gl.enable(gl.DEPTH_TEST);
-          gl.depthFunc(gl.LEQUAL);
-        }
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+
+        // Log scene state
+        logDebug(`Scene nodes: ${scene.children.length}, Poster visible: ${currentPoster ? currentPoster.visible : 'none'}`);
 
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
