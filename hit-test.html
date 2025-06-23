@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <meta charset='utf-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
-    <meta name='mobile-web-app-capable' content='yes'>
-    <meta name='apple-mobile-web-app-capable' content='yes'>
-    <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
-    <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png" />
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body { margin: 0; }
@@ -15,10 +15,10 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        background: rgba(0, 0, 0, 0.7);
-        color: white;
+        background: rgba(0, 0, 0, 0.8);
+        color: #fff;
         padding: 10px 20px;
-        border-radius: 5px;
+        border-radius: 10px;
         z-index: 1000;
         font-family: Arial, sans-serif;
         display: none;
@@ -27,15 +27,26 @@
         position: fixed;
         bottom: 0;
         left: 0;
-        background: rgba(0,0,0,0.7);
-        color: white;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
         padding: 10px;
         z-index: 1000;
         font-family: monospace;
-        font-size: 14px;
+        font-size: 12px;
         max-width: 100%;
         overflow: auto;
-        max-height: 100px;
+        max-height: 150px;
+      }
+      .back {
+        position: fixed;
+        top: 4px;
+        right: 4px;
+        background: none;
+        color: black;
+        padding: 4px 8px;
+        z-index: 1000;
+        font-family: monospace;
+        font-size: 12px;
       }
     </style>
     <title>AR Wall Art</title>
@@ -45,7 +56,7 @@
       <details open>
         <summary>AR Wall Art</summary>
         <p>
-          Point at a wall to see the blue reticle, then tap to place your artwork. 
+          Point at a wall to see the blue reticle, then tap to place your artwork.
           Use controls to adjust position and rotation.
           <a class="back" href="./">Back</a>
         </p>
@@ -53,8 +64,8 @@
     </header>
     <div id="guidance">Point at a wall to place your artwork.</div>
     <div id="debug"></div>
-    
-    <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
+
+    <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none">
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
       </button>
@@ -63,31 +74,31 @@
         <div class="space-y-4">
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Size:</label>
-            <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-blue-600">
+            <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-blue-600" />
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">X Position:</label>
-            <input type="range" id="posX" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+            <input type="range" id="posX" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600" />
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Y Position:</label>
-            <input type="range" id="posY" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+            <input type="range" id="posY" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600" />
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Z Position:</label>
-            <input type="range" id="posZ" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+            <input type="range" id="posZ" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600" />
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">X Rotation:</label>
-            <input type="range" id="rotX" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
+            <input type="range" id="rotX" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600" />
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Y Rotation:</label>
-            <input type="range" id="rotY" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
+            <input type="range" id="rotY" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600" />
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
-            <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
+            <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600" />
           </div>
           <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
             Remove Artwork
@@ -97,14 +108,14 @@
     </div>
 
     <script type="module">
-      import {WebXRButton} from './js/util/webxr-button.js';
-      import {Scene} from './js/render/scenes/scene.js';
-      import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
-      import {Node} from './js/render/core/node.js';
-      import {Gltf2Node} from './js/render/nodes/gltf2.js';
-      import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
-      import {Ray} from './js/render/math/ray.js';
-      import {Material, Sampler, Texture} from './js/render/core/material.js';
+      import { WebXRButton } from './js/util/webxr-button.js';
+      import { Scene } from './js/render/scenes/scene.js';
+      import { Renderer, createWebGLContext } from './js/render/core/renderer.js';
+      import { Node } from './js/render/core/node.js';
+      import { Gltf2Node } from './js/render/nodes/gltf2.js';
+      import { vec3, mat4, quat } from './js/render/math/gl-matrix.js';
+      import { Ray } from './js/render/math/ray.js';
+      import { Material, Sampler, Texture } from './js/render/core/material.js';
 
       // Debugging system
       function logDebug(message) {
@@ -130,7 +141,7 @@
       arObject.visible = false;
       scene.addNode(arObject);
 
-      let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
+      let reticle = new Gltf2Node({ url: 'media/gltf/reticle/reticle.gltf' });
       reticle.visible = false;
       scene.addNode(reticle);
 
@@ -145,8 +156,8 @@
         posY: 0,
         posZ: 0,
         rotX: 0,
-        rotY: 90,
-        rotZ: 0
+        rotY: 0,
+        rotZ: 0,
       };
 
       // Touch interaction variables
@@ -157,7 +168,7 @@
       let initialPinchDistance = 0;
       let initialPinchAngle = 0;
 
-      // Define simplified shaders for the textured plane
+      // Define simplified shaders
       const vertexShaderSource = `
         precision highp float;
         attribute vec3 a_position;
@@ -191,16 +202,17 @@
         canvas.width = 512;
         canvas.height = 512;
         const ctx = canvas.getContext('2d');
-        
+
         ctx.fillStyle = '#4A90E2';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#FFFFFF';
         ctx.font = '48px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Loading...', canvas.width/2, canvas.height/2);
-        
+        ctx.fillText('Loading...', canvas.width / 2, canvas.height / 2);
+
         // Create WebGL texture
         let texture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -211,8 +223,7 @@
 
         // Load image and update texture
         const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = function() {
+        img.onload = function () {
           logDebug('Image loaded successfully');
           const aspect = img.width / img.height;
           let drawWidth, drawHeight;
@@ -227,60 +238,60 @@
           const y = (canvas.height - drawHeight) / 2;
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, x, y, drawWidth, drawHeight);
+          gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
           logDebug('Texture updated with loaded image');
         };
-        img.onerror = function() {
+        img.onerror = function () {
           logDebug('Image failed to load, using fallback');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.fillStyle = '#FF6B6B';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.fillStyle = '#FFFFFF';
           ctx.font = '32px Arial';
           ctx.textAlign = 'center';
-          ctx.fillText('Failed', canvas.width/2, canvas.height/2);
+          ctx.fillText('Failed', canvas.width / 2, canvas.height / 2);
+          gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
         };
-        img.src = imageUrl;
+        img.src = imageUrl; // e.g., 'media/images/test.png'
 
         // Define geometry
         const vertices = new Float32Array([
-          -0.5, -0.5, 0.0,  // bottom left
-           0.5, -0.5, 0.0,  // bottom right
-           0.5,  0.5, 0.0,  // top right
-          -0.5,  0.5, 0.0   // top left
+          -0.5, -0.5, 0.0, // bottom left
+          0.5, -0.5, 0.0, // bottom right
+          0.5, 0.5, 0.0, // top right
+          -0.5, 0.5, 0.0, // top left
         ]);
 
         const texCoords = new Float32Array([
-          0.0, 1.0,  // bottom left
-          1.0, 1.0,  // bottom right
-          1.0, 0.0,  // top right
-          0.0, 0.0   // top left
+          0.0, 1.0, // bottom left
+          1.0, 1.0, // bottom right
+          1.0, 0.0, // top right
+          0.0, 0.0, // top left
         ]);
 
-        const indices = new Uint16Array([
-          0, 1, 2,
-          0, 2, 3
-        ]);
+        const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
         // Create material
         const sampler = new Sampler({
           minFilter: gl.LINEAR,
           magFilter: gl.LINEAR,
           wrapS: gl.CLAMP_TO_EDGE,
-          wrapT: gl.CLAMP_TO_EDGE
+          wrapT: gl.CLAMP_TO_EDGE,
         });
         const textureObj = new Texture('planeTexture', texture, sampler);
         const material = new Material('TexturedPlane', vertexShaderSource, fragmentShaderSource);
         material.addSampler('u_texture', textureObj);
-        
+
         material.state.blend = true;
         material.state.depthTest = true;
         material.state.cullFace = false;
         material.state.blendFuncSrc = gl.SRC_ALPHA;
         material.state.blendFuncDst = gl.ONE_MINUS_SRC_ALPHA;
-        
+
         logDebug(`Material states set: blend=${material.state.blend}, depthTest=${material.state.depthTest}, cullFace=${material.state.cullFace}`);
 
         // Create and compile shaders for debugging
@@ -316,14 +327,17 @@
         const viewMatrixLoc = gl.getUniformLocation(program, 'u_viewMatrix');
         const modelMatrixLoc = gl.getUniformLocation(program, 'u_modelMatrix');
         const textureLoc = gl.getUniformLocation(program, 'u_texture');
-        logDebug(`Shader bindings: a_position=${positionLoc}, a_texcoord=${texCoordLoc}, u_projectionMatrix=${projMatrixLoc}, u_viewMatrix=${viewMatrixLoc}, u_modelMatrix=${modelMatrixLoc}, u_texture=${textureLoc}`);
+        logDebug(
+          `Shader bindings: a_position=${positionLoc}, a_texcoord=${texCoordLoc}, u_projectionMatrix=${projMatrixLoc}, u_viewMatrix=${viewMatrixLoc}, u_modelMatrix=${modelMatrixLoc}, u_texture=${textureLoc}`,
+        );
+
+        // Explicitly set texture unit
+        gl.useProgram(program);
+        gl.uniform1i(textureLoc, 0);
+        gl.useProgram(null);
 
         // Create mesh
-        const mesh = renderer.createSimpleMesh({}, {
-          positions: vertices,
-          texCoords: texCoords,
-          indices: indices
-        }, material);
+        const mesh = renderer.createSimpleMesh({}, { positions: vertices, texCoords: texCoords, indices: indices }, material);
 
         // Create render primitive
         const primitive = renderer.createPrimitiveFromMesh(mesh);
@@ -420,12 +434,10 @@
           if (t >= 0) {
             const intersection = vec3.create();
             vec3.scaleAndAdd(intersection, rayOrigin, rayDirection, t);
-            
             const invMatrix = mat4.create();
             mat4.invert(invMatrix, posterMatrix);
             const localPos = vec3.create();
             vec3.transformMat4(localPos, intersection, invMatrix);
-            
             return Math.abs(localPos[0]) <= 0.5 && Math.abs(localPos[1]) <= 0.5;
           }
         }
@@ -436,17 +448,16 @@
         xrButton = new WebXRButton({
           onRequestSession: onRequestSession,
           onEndSession: onEndSession,
-          textEnterXRTitle: "START AR",
-          textXRNotFoundTitle: "AR NOT FOUND",
-          textExitXRTitle: "EXIT AR",
+          textEnterXRTitle: 'START AR',
+          textXRNotFoundTitle: 'AR NOT FOUND',
+          textExitXRTitle: 'EXIT AR',
         });
         document.querySelector('header').appendChild(xrButton.domElement);
 
         if (navigator.xr) {
-          navigator.xr.isSessionSupported('immersive-ar')
-            .then((supported) => {
-              xrButton.enabled = supported;
-            });
+          navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+            xrButton.enabled = supported;
+          });
         }
 
         // Control listeners
@@ -484,7 +495,7 @@
             currentPoster = null;
             document.getElementById('controls').style.display = 'none';
             document.getElementById('guidance').style.display = 'block';
-            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 90, rotZ: 0 };
+            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
             updatePosterTransform();
           }
         });
@@ -522,7 +533,7 @@
             isPinch = true;
             const dx = e.touches[1].clientX - e.touches[0].clientX;
             const dy = e.touches[1].clientY - e.touches[0].clientY;
-            initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+            initialPinchAngle = Math.atan2(dy, dx) * (180 / Math.PI);
             initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
           }
         });
@@ -544,7 +555,7 @@
             const dx = e.touches[1].clientX - e.touches[0].clientX;
             const dy = e.touches[1].clientY - e.touches[0].clientY;
             const currentDistance = Math.sqrt(dx * dx + dy * dy);
-            const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+            const currentAngle = Math.atan2(dy, dx) * (180 / Math.PI);
             const scaleChange = currentDistance / initialPinchDistance;
             controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
             controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
@@ -554,7 +565,7 @@
           }
         });
 
-        canvas.addEventListener('touchend', (e) => {
+        canvas.addEventListener('touchend', () => {
           isDragging = false;
           isPinch = false;
         });
@@ -563,16 +574,19 @@
       }
 
       function onRequestSession() {
-        return navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local', 'dom-overlay'],
-          optionalFeatures: ['hit-test'],
-          domOverlay: { root: document.body }
-        }).then((session) => {
-          xrButton.setSession(session);
-          onSessionStarted(session);
-        }).catch((error) => {
-          alert(`AR Session Error: ${error.message}`);
-        });
+        return navigator.xr
+          .requestSession('immersive-ar', {
+            requiredFeatures: ['local', 'dom-overlay'],
+            optionalFeatures: ['hit-test'],
+            domOverlay: { root: document.body },
+          })
+          .then((session) => {
+            xrButton.setSession(session);
+            onSessionStarted(session);
+          })
+          .catch((error) => {
+            logDebug(`AR Session Error: ${error.message}`);
+          });
       }
 
       let lastPose = null;
@@ -580,37 +594,34 @@
         session.addEventListener('end', onSessionEnded);
         session.addEventListener('select', onSelect);
 
-        if (!gl) {
-          try {
-            gl = createWebGLContext({
-              xrCompatible: true,
-              alpha: true,
-              preserveDrawingBuffer: true
-            });
-            if (!gl) {
-              alert('Error: Failed to create WebGL context');
-              session.end();
-              return;
-            }
-            // Set WebGL states (commented out for testing)
-            // gl.enable(gl.DEPTH_TEST);
-            // gl.enable(gl.BLEND);
-            // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-            renderer = new Renderer(gl);
-            scene.setRenderer(renderer);
-            logDebug('WebGL context and renderer created');
-          } catch (error) {
-            alert(`WebGL Error: ${error.message}`);
-            session.end();
-            return;
+        try {
+          gl = createWebGLContext({
+            xrCompatible: true,
+            alpha: true,
+            preserveDrawingBuffer: true,
+          });
+          if (!gl) {
+            throw new Error('Failed to create WebGL context');
           }
+          // Set global WebGL states
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+          gl.enable(gl.DEPTH_TEST);
+          gl.depthFunc(gl.LEQUAL);
+          renderer = new Renderer(gl);
+          scene.setRenderer(renderer);
+          logDebug('WebGL context and renderer created');
+        } catch (error) {
+          logDebug(`WebGL Error: ${error.message}`);
+          session.end();
+          return;
         }
 
         try {
           session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
           setTimeout(setupTouchInteraction, 100);
         } catch (error) {
-          alert(`XRWebGLLayer Error: ${error.message}`);
+          logDebug(`XRWebGLLayer Error: ${error.message}`);
           session.end();
           return;
         }
@@ -620,8 +631,6 @@
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
             xrHitTestSource = hitTestSource;
             logDebug('Hit test source created');
-          }).catch((error) => {
-            logDebug(`HitTest Error: ${error.message}`);
           });
         });
 
@@ -629,8 +638,6 @@
           xrRefSpace = refSpace;
           session.requestAnimationFrame(onXRFrame);
           logDebug('XR session started successfully');
-        }).catch((error) => {
-          logDebug(`RefSpace Error: ${error.message}`);
         });
 
         document.getElementById('guidance').style.display = 'block';
@@ -670,7 +677,7 @@
             surfaceNormal = vec3.clone(upVector);
             surfaceType = 'Floor';
           } else {
-            let viewerForward = vec3.fromValues(-90, 0, 0);
+            let viewerForward = vec3.fromValues(0, 0, -1);
             vec3.transformQuat(viewerForward, viewerForward, rotation);
             surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
             vec3.normalize(surfaceNormal, surfaceNormal);
@@ -693,12 +700,12 @@
           mat4.fromRotationTranslation(finalMatrix, rotation, position);
           mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
-          let yRotation = quat.create();
-          quat.fromEuler(yRotation, 0, 90, 0);
-          let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotation);
-          mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
+          // Move closer to camera
+          let translateMatrix = mat4.create();
+          mat4.fromTranslation(translateMatrix, [0, 0, -0.3]);
+          mat4.multiply(finalMatrix, finalMatrix, translateMatrix);
 
-          let newObject = createImagePlaneNode('media/images/wallart.png');
+          let newObject = createImagePlaneNode('media/images/test.png'); // Replace with your local PNG path
           if (!newObject) {
             logDebug('Failed to create plane node');
             return;
@@ -709,9 +716,10 @@
 
           updatePosterTransform();
           scene.addNode(newObject);
-          
+
           logDebug('Artwork placed successfully');
           logDebug(`Scene children: ${scene.children.length}`);
+          logDebug(`Scene children names: ${scene.children.map((n) => n.name || 'unnamed').join(', ')}`);
 
           document.getElementById('controls').style.display = 'block';
           document.getElementById('guidance').style.display = 'none';
@@ -760,6 +768,7 @@
         }
 
         scene.startFrame();
+        logDebug('Rendering frame');
         session.requestAnimationFrame(onXRFrame);
         scene.drawXRFrame(frame, pose);
         scene.endFrame();
