@@ -489,7 +489,7 @@
         const testImage = new Image();
         testImage.onload = () => logDebug('Test image loaded successfully');
         testImage.onerror = () => logDebug('Test image failed to load');
-        testImage.src = 'media/images/wallart.png';
+        testImage.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/640px-PNG_transparency_demonstration_1.png';
       }
 
       function onRequestSession() {
@@ -625,7 +625,7 @@
           mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
 
           // Update this path to your actual image
-          let newObject = createImagePlaneNode('media/images/wallart.png');
+          let newObject = createImagePlaneNode('https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/640px-PNG_transparency_demonstration_1.png');
           newObject.visible = true;
           currentPoster = newObject;
           baseMatrix = mat4.clone(finalMatrix);
