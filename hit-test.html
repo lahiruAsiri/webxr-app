@@ -149,173 +149,125 @@
       };
 
       function createImagePlaneNode(imageUrl) {
-  logDebug(`Creating image plane with: ${imageUrl}`);
-  
   const plane = new Node();
-  plane.visible = true;
-  
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
   canvas.height = 1024;
   const ctx = canvas.getContext('2d');
   
-  // Initial debug pattern
-  ctx.fillStyle = '#ff0000';
+  // Draw loading state
+  ctx.fillStyle = '#FF0000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '30px Arial';
-  ctx.fillText('Loading...', 50, 50);
   
   const img = new Image();
   img.crossOrigin = 'anonymous';
   
   img.onload = function() {
-    logDebug('Image loaded successfully');
-    
+    // Draw image centered
     const aspect = img.width / img.height;
-    let drawWidth, drawHeight;
-    
-    if (aspect > 1) {
-      drawWidth = canvas.width;
-      drawHeight = canvas.width / aspect;
-    } else {
-      drawHeight = canvas.height;
-      drawWidth = canvas.height * aspect;
-    }
+    const [width, height] = aspect > 1 ? 
+      [canvas.width, canvas.width / aspect] : 
+      [canvas.height * aspect, canvas.height];
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 
-      (canvas.width - drawWidth) / 2, 
-      (canvas.height - drawHeight) / 2,
-      drawWidth, 
-      drawHeight
+      (canvas.width - width)/2, 
+      (canvas.height - height)/2,
+      width, height
     );
-    
-    try {
-      // Create proper texture object
-      const texture = {
-        textureKey: 'canvas-texture-' + Date.now(),
-        format: gl.RGBA,
-        width: canvas.width,
-        height: canvas.height,
-        _data: canvas,
-        sampler: {
-          minFilter: gl.LINEAR,
-          magFilter: gl.LINEAR,
-          wrapS: gl.CLAMP_TO_EDGE,
-          wrapT: gl.CLAMP_TO_EDGE
-        },
-        waitForComplete: () => Promise.resolve()
-      };
 
-      // Create properly structured material
-      const material = {
-        materialName: 'image-plane',
-        state: 0, // Default state
-        baseColorTexture: texture,
-        baseColorFactor: [1, 1, 1, 1],
-        metallicFactor: 0,
-        roughnessFactor: 1,
-        doubleSided: true,
+    // Create texture
+    const texture = {
+      textureKey: `img-${Date.now()}`,
+      format: gl.RGBA,
+      width: canvas.width,
+      height: canvas.height,
+      _data: canvas,
+      sampler: {
+        minFilter: gl.LINEAR,
+        magFilter: gl.LINEAR,
+        wrapS: gl.CLAMP_TO_EDGE,
+        wrapT: gl.CLAMP_TO_EDGE
+      },
+      waitForComplete: () => Promise.resolve()
+    };
+
+    // Create material
+    const material = {
+      materialName: 'image-plane',
+      state: CAP.BLEND | CAP.DEPTH_TEST | CAP.CULL_FACE,
+      _samplers: [{_uniformName: 'baseColorTexture', _texture: texture}],
+      _uniforms: [
+        {_uniformName: 'baseColorFactor', _value: [1,1,1,1], _length: 4},
+        {_uniformName: 'metallicFactor', _value: [0], _length: 1},
+        {_uniformName: 'roughnessFactor', _value: [1], _length: 1}
+      ],
+      getProgramDefines: () => ({}),
+      vertexSource: `
+        attribute vec3 POSITION;
+        attribute vec2 TEXCOORD_0;
+        uniform mat4 PROJECTION_MATRIX;
+        uniform mat4 VIEW_MATRIX;
+        uniform mat4 MODEL_MATRIX;
+        varying vec2 vTexCoord;
         
-        // REQUIRED: Sampler definitions
-        _samplers: [{
-          _uniformName: 'baseColorTexture',
-          _texture: texture
-        }],
+        void vertex_main() {
+          vTexCoord = TEXCOORD_0;
+          gl_Position = PROJECTION_MATRIX * VIEW_MATRIX * MODEL_MATRIX * vec4(POSITION, 1.0);
+        }
+      `,
+      fragmentSource: `
+        precision mediump float;
+        varying vec2 vTexCoord;
+        uniform sampler2D baseColorTexture;
         
-        // REQUIRED: Uniform definitions
-        _uniforms: [{
-          _uniformName: 'baseColorFactor',
-          _value: [1, 1, 1, 1],
-          _length: 4
-        }],
-        
-        getProgramDefines: () => ({}),
-        vertexSource: `
-          attribute vec3 POSITION;
-          attribute vec2 TEXCOORD_0;
-          uniform mat4 PROJECTION_MATRIX;
-          uniform mat4 VIEW_MATRIX;
-          uniform mat4 MODEL_MATRIX;
-          varying vec2 vTexCoord;
-          
-          vec4 vertex_main() {
-            vTexCoord = TEXCOORD_0;
-            return PROJECTION_MATRIX * VIEW_MATRIX * MODEL_MATRIX * vec4(POSITION, 1.0);
-          }
-        `,
-        
-        fragmentSource: `
-          precision mediump float;
-          varying vec2 vTexCoord;
-          uniform sampler2D baseColorTexture;
-          uniform vec4 baseColorFactor;
-          
-          vec4 fragment_main() {
-            vec4 texColor = texture2D(baseColorTexture, vTexCoord);
-            return texColor * baseColorFactor;
-          }
-        `
-      };
-      
-      // Create geometry
-      const primitive = {
-        mode: gl.TRIANGLES,
-        attributes: [
-          {
-            name: 'POSITION',
-            buffer: renderer.createRenderBuffer(
-              gl.ARRAY_BUFFER,
-              new Float32Array([
-                -0.5, -0.5, 0,
-                0.5, -0.5, 0,
-                -0.5, 0.5, 0,
-                0.5, 0.5, 0
-              ])
-            ),
-            componentCount: 3
-          },
-          {
-            name: 'TEXCOORD_0',
-            buffer: renderer.createRenderBuffer(
-              gl.ARRAY_BUFFER,
-              new Float32Array([
-                0, 0,
-                1, 0,
-                0, 1,
-                1, 1
-              ])
-            ),
-            componentCount: 2
-          }
-        ],
-        indexBuffer: renderer.createRenderBuffer(
-          gl.ELEMENT_ARRAY_BUFFER,
-          new Uint16Array([0, 1, 2, 2, 1, 3])
-        ),
-        indexType: gl.UNSIGNED_SHORT,
-        elementCount: 6
-      };
-      
-      const renderPrimitive = renderer.createRenderPrimitive(primitive, material);
-      plane.addRenderPrimitive(renderPrimitive);
-      logDebug('Mesh created successfully');
-    } catch (error) {
-      logDebug(`Error creating mesh: ${error.message}`);
-      console.error(error);
-    }
+        void fragment_main() {
+          gl_FragColor = texture2D(baseColorTexture, vTexCoord);
+        }
+      `
+    };
+
+    // Create geometry
+    const primitive = {
+      mode: gl.TRIANGLES,
+      attributes: [
+        {
+          name: 'POSITION',
+          buffer: renderer.createRenderBuffer(
+            gl.ARRAY_BUFFER,
+            new Float32Array([
+              -0.5,-0.5,0, 0.5,-0.5,0, -0.5,0.5,0, 0.5,0.5,0
+            ])
+          ),
+          componentCount: 3
+        },
+        {
+          name: 'TEXCOORD_0',
+          buffer: renderer.createRenderBuffer(
+            gl.ARRAY_BUFFER,
+            new Float32Array([0,0, 1,0, 0,1, 1,1])
+          ),
+          componentCount: 2
+        }
+      ],
+      indexBuffer: renderer.createRenderBuffer(
+        gl.ELEMENT_ARRAY_BUFFER,
+        new Uint16Array([0,1,2, 2,1,3])
+      ),
+      indexType: gl.UNSIGNED_SHORT,
+      elementCount: 6
+    };
+
+    plane.addRenderPrimitive(
+      renderer.createRenderPrimitive(primitive, material)
+    );
   };
-  
-  img.onerror = function() {
-    logDebug(`Error loading image: ${imageUrl}`);
-    ctx.fillStyle = '#00ff00';
+
+  img.onerror = () => {
+    ctx.fillStyle = '#00FF00';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#000000';
-    ctx.font = '30px Arial';
-    ctx.fillText('Image Error', 50, 50);
   };
-  
+
   img.src = imageUrl;
   return plane;
 }
