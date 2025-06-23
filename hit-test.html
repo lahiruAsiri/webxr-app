@@ -698,7 +698,7 @@
           let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotation);
           mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
 
-          let newObject = createImagePlaneNode('https://upload.wikimedia.org/wiki/commons/thumb/4/47/PNG_transparency_demonstration_1.png/640px-PNG_transparency_demonstration_1.png');
+          let newObject = createImagePlaneNode('media/images/wallart.png');
           if (!newObject) {
             logDebug('Failed to create plane node');
             return;
