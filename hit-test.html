@@ -6,7 +6,10 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <style>
-      body { margin: 0; overflow: hidden; }
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
       #guidance {
         position: fixed;
         top: 50%;
@@ -33,12 +36,25 @@
         overflow: auto;
         max-height: 150px;
       }
+      #start-ar {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 1000;
+        padding: 8px 16px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
     </style>
     <title>AR Wall Art (Three.js)</title>
   </head>
   <body>
     <div id="guidance">Point at a wall to place your artwork.</div>
     <div id="debug"></div>
+    <button id="start-ar">Start AR</button>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
     <script>
       function logDebug(message) {
@@ -48,6 +64,7 @@
         debugDiv.scrollTop = debugDiv.scrollHeight;
       }
 
+      // Three.js setup
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
       const renderer = new THREE.WebGLRenderer({ alpha: true });
@@ -55,9 +72,10 @@
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
-      let reticle = new THREE.Mesh(
+      // Reticle
+      const reticle = new THREE.Mesh(
         new THREE.RingGeometry(0.05, 0.06, 32),
-        new THREE.MeshBasicMaterial({ color: 0x0000ff })
+        new THREE.MeshBasicMaterial({ color: 0x0000ff, side: THREE.DoubleSide })
       );
       reticle.visible = false;
       scene.add(reticle);
@@ -68,38 +86,89 @@
       let referenceSpace = null;
 
       async function startXR() {
+        if (!navigator.xr) {
+          logDebug('WebXR not supported on this device/browser');
+          alert('WebXR not supported. Please use a WebXR-compatible device and browser (e.g., Chrome on Android).');
+          return;
+        }
+
         try {
+          // Check if immersive-ar is supported
+          const supported = await navigator.xr.isSessionSupported('immersive-ar');
+          if (!supported) {
+            logDebug('Immersive AR not supported');
+            alert('Immersive AR not supported on this device.');
+            return;
+          }
+
+          // Request AR session
           xrSession = await navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: ['local', 'hit-test'],
+            requiredFeatures: ['local'],
+            optionalFeatures: ['hit-test', 'dom-overlay'],
             domOverlay: { root: document.body },
           });
-          renderer.xr.setSession(xrSession);
-          referenceSpace = await xrSession.requestReferenceSpace('local');
-          hitTestSource = await xrSession.requestHitTestSource({ space: await xrSession.requestReferenceSpace('viewer') });
-          document.getElementById('guidance').style.display = 'block';
           logDebug('XR session started');
+
+          // Set XR session for renderer
+          renderer.xr.setSession(xrSession);
+
+          // Get reference spaces
+          referenceSpace = await xrSession.requestReferenceSpace('local').catch((err) => {
+            logDebug(`Local reference space error: ${err.message}`);
+            throw err;
+          });
+          const viewerSpace = await xrSession.requestReferenceSpace('viewer').catch((err) => {
+            logDebug(`Viewer reference space error: ${err.message}`);
+            throw err;
+          });
+
+          // Create hit-test source
+          try {
+            hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
+            logDebug('Hit test source created');
+          } catch (err) {
+            logDebug(`Hit test source error: ${err.message}`);
+            hitTestSource = null; // Allow rendering without hit-test
+          }
+
+          document.getElementById('guidance').style.display = 'block';
           animate();
         } catch (error) {
-          logDebug(`XR Error: ${error.message}`);
+          logDebug(`XR session error: ${error.message}`);
+          alert(`Failed to start AR: ${error.message}`);
         }
       }
 
       function animate() {
         renderer.setAnimationLoop((time, frame) => {
-          if (!frame) return;
+          if (!frame || !xrSession) {
+            logDebug('No XR frame or session active');
+            return;
+          }
 
           const pose = frame.getViewerPose(referenceSpace);
-          reticle.visible = false;
+          if (!pose) {
+            logDebug('No viewer pose available');
+            reticle.visible = false;
+            return;
+          }
 
-          if (hitTestSource && pose && !poster) {
+          reticle.visible = false;
+          document.getElementById('guidance').style.display = 'block';
+
+          if (hitTestSource && !poster) {
             const hitTestResults = frame.getHitTestResults(hitTestSource);
-            if (hitTestResults.length) {
+            logDebug(`Hit test results: ${hitTestResults.length}`);
+            if (hitTestResults.length > 0) {
               const hit = hitTestResults[0].getPose(referenceSpace);
               reticle.matrix.fromArray(hit.transform.matrix);
               reticle.matrix.decompose(reticle.position, reticle.quaternion, reticle.scale);
               reticle.visible = true;
               document.getElementById('guidance').style.display = 'none';
+              logDebug(`Reticle position: [${reticle.position.x.toFixed(3)}, ${reticle.position.y.toFixed(3)}, ${reticle.position.z.toFixed(3)}]`);
             }
+          } else if (!hitTestSource) {
+            logDebug('No hit test source; reticle disabled');
           }
 
           renderer.render(scene, camera);
@@ -111,6 +180,9 @@
           const geometry = new THREE.PlaneGeometry(0.5, 0.5);
           const texture = new THREE.TextureLoader().load('media/images/wallart.png', () => {
             logDebug('Image loaded successfully');
+            texture.needsUpdate = true;
+          }, undefined, (err) => {
+            logDebug(`Image load error: ${err.message || 'Failed to load image'}`);
           });
           const material = new THREE.MeshBasicMaterial({
             map: texture,
@@ -122,14 +194,28 @@
           poster.quaternion.copy(reticle.quaternion);
           scene.add(poster);
           document.getElementById('guidance').style.display = 'none';
-          logDebug('Poster placed');
+          logDebug(`Poster placed at [${poster.position.x.toFixed(3)}, ${poster.position.y.toFixed(3)}, ${poster.position.z.toFixed(3)}]`);
         }
       }
 
+      // Event listeners
+      document.getElementById('start-ar').addEventListener('click', startXR);
       renderer.domElement.addEventListener('click', placePoster);
 
-      document.body.innerHTML += '<button style="position: fixed; top: 10px; left: 10px; z-index: 1000;">Start AR</button>';
-      document.querySelector('button').addEventListener('click', startXR);
+      // Handle session end
+      renderer.xr.addEventListener('sessionend', () => {
+        logDebug('XR session ended');
+        xrSession = null;
+        hitTestSource = null;
+        document.getElementById('guidance').style.display = 'block';
+      });
+
+      // Handle window resize
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
     </script>
   </body>
 </html>
