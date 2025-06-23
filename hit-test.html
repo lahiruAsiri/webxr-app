@@ -1,26 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
+    <meta name='mobile-web-app-capable' content='yes'>
+    <meta name='apple-mobile-web-app-capable' content='yes'>
+    <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
+    <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-      }
+      body { margin: 0; }
       #guidance {
         position: fixed;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        background: rgba(0, 0, 0, 0.8);
-        color: #fff;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
         padding: 10px 20px;
-        border-radius: 10px;
+        border-radius: 5px;
         z-index: 1000;
         font-family: Arial, sans-serif;
+        display: none;
       }
       #debug {
         position: fixed;
@@ -36,27 +37,73 @@
         overflow: auto;
         max-height: 150px;
       }
-      #start-ar {
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        z-index: 1000;
-        padding: 8px 16px;
-        background: #007bff;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-      }
     </style>
-    <title>AR Wall Art (Three.js)</title>
+    <title>Hit Test</title>
   </head>
   <body>
-    <div id="guidance">Point at a wall to place your artwork.</div>
+    <header>
+      <details open>
+        <summary>Hit Test</summary>
+        <p>
+          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Z axis) to adjust. Click "Remove Poster" to place a new one.
+          <a class="back" href="./">Back</a>
+        </p>
+      </details>
+    </header>
+    <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
     <div id="debug"></div>
-    <button id="start-ar">Start AR</button>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r168/three.min.js"></script>
-    <script>
+    <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
+      <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
+        <span id="toggleIcon">-</span>
+      </button>
+      <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
+        <div class="space-y-4">
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Size:</label>
+            <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">X Position:</label>
+            <input type="range" id="posX" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Y Position:</label>
+            <input type="range" id="posY" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Z Position:</label>
+            <input type="range" id="posZ" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">X Rotation:</label>
+            <input type="range" id="rotX" min="-180" max="180" step="1" value="90" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Y Rotation:</label>
+            <input type="range" id="rotY" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
+          </div>
+          <div class="flex items-center space-x-4">
+            <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
+            <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
+          </div>
+          <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
+            Remove Poster
+          </button>
+        </div>
+      </div>
+    </div>
+    <script type="module">
+      import {WebXRButton} from './js/util/webxr-button.js';
+      import {Scene} from './js/render/scenes/scene.js';
+      import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
+      import {Node} from './js/render/core/node.js';
+      import {Gltf2Node} from './js/render/nodes/gltf2.js';
+      import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
+      import {Ray} from './js/render/math/ray.js';
+      import {Material, Sampler, Texture} from './js/render/core/material.js';
+
+      // Debug logging
       function logDebug(message) {
         console.log('[DEBUG]', message);
         const debugDiv = document.getElementById('debug');
@@ -64,169 +111,608 @@
         debugDiv.scrollTop = debugDiv.scrollHeight;
       }
 
-      // Three.js setup
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-      const renderer = new THREE.WebGLRenderer({ alpha: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      document.body.appendChild(renderer.domElement);
+      // XR globals
+      let xrButton = null;
+      let xrRefSpace = null;
+      let xrViewerSpace = null;
+      let xrHitTestSource = null;
 
-      // Reticle
-      const reticle = new THREE.Mesh(
-        new THREE.RingGeometry(0.05, 0.06, 32),
-        new THREE.MeshBasicMaterial({ color: 0x0000ff, side: THREE.DoubleSide })
-      );
+      // WebGL scene globals
+      let gl = null;
+      let renderer = null;
+      let scene = new Scene();
+      scene.enableStats(false);
+
+      let arObject = new Node();
+      arObject.visible = false;
+      scene.addNode(arObject);
+
+      // Create plane node for PNG wall art
+      function createImagePlaneNode(imageUrl) {
+        const planeNode = new Node();
+        planeNode.name = 'ImagePlane';
+        logDebug('Creating image plane node');
+
+        // Create canvas for texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+
+        // Fallback texture
+        ctx.fillStyle = '#FF6B6B';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Loading...', canvas.width / 2, canvas.height / 2);
+
+        // Create WebGL texture
+        let texture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        logDebug('WebGL texture created');
+
+        // Load PNG image
+        const img = new Image();
+        img.onload = function () {
+          logDebug('Image loaded successfully');
+          const aspect = img.width / img.height;
+          let drawWidth, drawHeight;
+          if (aspect > 1) {
+            drawWidth = canvas.width;
+            drawHeight = canvas.width / aspect;
+          } else {
+            drawHeight = canvas.height;
+            drawWidth = canvas.height * aspect;
+          }
+          const x = (canvas.width - drawWidth) / 2;
+          const y = (canvas.height - drawHeight) / 2;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, x, y, drawWidth, drawHeight);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+          logDebug('Texture updated with loaded image');
+        };
+        img.onerror = function () {
+          logDebug('Image failed to load');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = '#FF0000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '32px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('Error', canvas.width / 2, canvas.height / 2);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+        };
+        img.src = imageUrl; // Your PNG path
+
+        // Define plane geometry (0.5m x 0.5m, centered)
+        const vertices = new Float32Array([
+          -0.25, -0.25, 0.0, // bottom-left
+           0.25, -0.25, 0.0, // bottom-right
+           0.25,  0.25, 0.0, // top-right
+          -0.25,  0.25, 0.0, // top-left
+        ]);
+
+        const texCoords = new Float32Array([
+          0.0, 1.0, // bottom-left
+          1.0, 1.0, // bottom-right
+          1.0, 0.0, // top-right
+          0.0, 0.0, // top-left
+        ]);
+
+        const indices = new Uint16Array([
+          0, 1, 2,
+          0, 2, 3,
+        ]);
+
+        // Define shaders
+        const vertexShader = `
+          precision highp float;
+          attribute vec3 POSITION;
+          attribute vec2 TEXCOORD_0;
+          uniform mat4 PROJECTION_MATRIX;
+          uniform mat4 VIEW_MATRIX;
+          uniform mat4 MODEL_MATRIX;
+          varying vec2 vTexCoord;
+          void main() {
+            vTexCoord = TEXCOORD_0;
+            gl_Position = PROJECTION_MATRIX * VIEW_MATRIX * MODEL_MATRIX * vec4(POSITION, 1.0);
+          }
+        `;
+
+        const fragmentShader = `
+          precision highp float;
+          varying vec2 vTexCoord;
+          uniform sampler2D uTexture;
+          void main() {
+            gl_FragColor = texture2D(uTexture, vTexCoord);
+          }
+        `;
+
+        // Create material
+        const sampler = new Sampler({
+          minFilter: gl.LINEAR,
+          magFilter: gl.LINEAR,
+          wrapS: gl.CLAMP_TO_EDGE,
+          wrapT: gl.CLAMP_TO_EDGE,
+        });
+        const textureObj = new Texture('planeTexture', texture, sampler);
+        const material = new Material('TexturedPlane', vertexShader, fragmentShader);
+        material.addSampler('uTexture', textureObj);
+
+        // Enable blending for PNG transparency
+        material.state.blend = true;
+        material.state.blendFuncSrc = gl.SRC_ALPHA;
+        material.state.blendFuncDst = gl.ONE_MINUS_SRC_ALPHA;
+        material.state.depthTest = true;
+        material.state.cullFace = false;
+        logDebug(`Material states: blend=${material.state.blend}, depthTest=${material.state.depthTest}, cullFace=${material.state.cullFace}`);
+
+        // Create mesh and render primitive
+        const mesh = renderer.createSimpleMesh({}, {
+          positions: vertices,
+          texCoords: texCoords,
+          indices: indices,
+        }, material);
+        const primitive = renderer.createPrimitiveFromMesh(mesh);
+        planeNode.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
+        logDebug(`Plane node created with ${planeNode.renderPrimitives.length} primitives`);
+
+        return planeNode;
+      }
+
+      // Initialize plane node instead of GLTF
+      let wallArt = null;
+      let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
-      scene.add(reticle);
+      scene.addNode(reticle);
 
-      let poster = null;
-      let xrSession = null;
-      let hitTestSource = null;
-      let referenceSpace = null;
+      scene.clear = false;
 
-      async function startXR() {
-        if (!navigator.xr) {
-          logDebug('WebXR not supported on this device/browser');
-          alert('WebXR not supported. Use Chrome on an AR-capable Android device.');
-          return;
-        }
+      // Poster management
+      let currentPoster = null;
+      let baseMatrix = mat4.create();
+      let controls = {
+        scale: 0.5,
+        posX: 0,
+        posY: 0,
+        posZ: 0,
+        rotX: 90, // Initial X rotation for wall alignment
+        rotY: 0,
+        rotZ: 0,
+      };
 
-        try {
-          // Check AR support
-          const supported = await navigator.xr.isSessionSupported('immersive-ar');
-          if (!supported) {
-            logDebug('Immersive AR not supported');
-            alert('Immersive AR not supported on this device.');
-            return;
-          }
+      // Touch control variables
+      let isDragging = false;
+      let isPinching = false;
+      let lastTouchX = 0;
+      let lastTouchY = 0;
+      let initialPinchAngle = 0;
+      let initialPinchDistance = 0;
+      let lastPose = null;
 
-          // Start AR session
-          xrSession = await navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: ['local'],
-            optionalFeatures: ['hit-test', 'dom-overlay'],
-            domOverlay: { root: document.body },
-          });
-          logDebug('XR session started');
+      function updatePosterTransform() {
+        if (!currentPoster) return;
 
-          // Bind session to renderer
-          renderer.xr.setSession(xrSession);
-          xrSession.addEventListener('end', onSessionEnd);
+        let matrix = mat4.clone(baseMatrix);
+        let position = vec3.create();
+        let rotation = quat.create();
+        mat4.getTranslation(position, matrix);
+        mat4.getRotation(rotation, matrix);
 
-          // Get reference spaces
-          referenceSpace = await xrSession.requestReferenceSpace('local').catch((err) => {
-            logDebug(`Local reference space error: ${err.message}`);
-            throw err;
-          });
+        // Apply position offsets
+        let offset = vec3.fromValues(controls.posX, controls.posY, controls.posZ);
+        vec3.add(position, position, offset);
 
-          // Attempt hit-test
-          try {
-            const viewerSpace = await xrSession.requestReferenceSpace('viewer');
-            hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
-            logDebug('Hit test source created');
-          } catch (err) {
-            logDebug(`Hit test not supported: ${err.message}`);
-            hitTestSource = null;
-          }
+        // Apply user rotations
+        let userRotation = quat.create();
+        quat.fromEuler(userRotation, controls.rotX, controls.rotY, controls.rotZ);
+        quat.multiply(rotation, rotation, userRotation);
 
-          document.getElementById('guidance').style.display = 'block';
-          animate();
-        } catch (error) {
-          logDebug(`XR session error: ${error.message}`);
-          alert(`Failed to start AR: ${error.message}`);
-          xrSession = null;
-          renderer.setAnimationLoop(null); // Stop loop on failure
-        }
+        // Apply scale
+        let scaleMatrix = mat4.create();
+        mat4.fromScaling(scaleMatrix, [controls.scale, controls.scale, controls.scale]);
+        let transformMatrix = mat4.create();
+        mat4.fromRotationTranslation(transformMatrix, rotation, position);
+        mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
+
+        currentPoster.matrix = transformMatrix;
+
+        // Log position for debugging
+        let worldPos = vec3.create();
+        mat4.getTranslation(worldPos, transformMatrix);
+        logDebug(`Poster position: [${worldPos[0].toFixed(3)}, ${worldPos[1].toFixed(3)}, ${worldPos[2].toFixed(3)}]`);
+
+        // Update sliders
+        document.getElementById('scale').value = controls.scale;
+        document.getElementById('posX').value = controls.posX;
+        document.getElementById('posY').value = controls.posY;
+        document.getElementById('posZ').value = controls.posZ;
+        document.getElementById('rotX').value = controls.rotX;
+        document.getElementById('rotY').value = controls.rotY;
+        document.getElementById('rotZ').value = controls.rotZ;
       }
 
-      function onSessionEnd() {
-        logDebug('XR session ended');
-        xrSession = null;
-        hitTestSource = null;
-        reticle.visible = false;
-        poster = null;
-        document.getElementById('guidance').style.display = 'block';
-        renderer.setAnimationLoop(null); // Stop animation loop
+      function rayIntersectsPoster(touchX, touchY, canvas, pose) {
+        if (!currentPoster || !pose) return false;
+
+        const rect = canvas.getBoundingClientRect();
+        const ndcX = (2.0 * touchX - rect.width) / rect.width;
+        const ndcY = (rect.height - 2.0 * touchY) / rect.height;
+
+        const projectionMatrix = mat4.create();
+        const fov = 60 * Math.PI / 180;
+        mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
+        const viewMatrix = pose.views[0].transform.inverse.matrix;
+
+        const rayOrigin = vec3.create();
+        const rayEnd = vec3.fromValues(ndcX, ndcY, -1);
+        const rayOriginView = vec3.fromValues(ndcX, ndcY, -1);
+        const rayEndView = vec3.fromValues(ndcX, ndcY, 1);
+        mat4.invert(projectionMatrix, projectionMatrix);
+        vec3.transformMat4(rayOriginView, rayOriginView, projectionMatrix);
+        vec3.transformMat4(rayEndView, rayEndView, projectionMatrix);
+        vec3.transformMat4(rayOrigin, rayOriginView, viewMatrix);
+        vec3.transformMat4(rayEnd, rayEndView, viewMatrix);
+        const rayDirection = vec3.create();
+        vec3.subtract(rayDirection, rayEnd, rayOrigin);
+        vec3.normalize(rayDirection, rayDirection);
+
+        const posterMatrix = currentPoster.matrix;
+        const posterPosition = vec3.create();
+        const posterNormal = vec3.fromValues(0, 0, 1); // Plane faces +Z in local space
+        const worldNormal = vec3.create();
+        mat4.getTranslation(posterPosition, posterMatrix);
+        vec3.transformMat4(worldNormal, posterNormal, posterMatrix);
+        vec3.subtract(worldNormal, worldNormal, posterPosition);
+        vec3.normalize(worldNormal, worldNormal);
+
+        const denom = vec3.dot(worldNormal, rayDirection);
+        if (Math.abs(denom) > 0.0001) {
+          const toPlane = vec3.create();
+          vec3.subtract(toPlane, posterPosition, rayOrigin);
+          const t = vec3.dot(toPlane, worldNormal) / denom;
+          if (t >= 0) {
+            const intersection = vec3.create();
+            vec3.scaleAndAdd(intersection, rayOrigin, rayDirection, t);
+            const invMatrix = mat4.create();
+            mat4.invert(invMatrix, posterMatrix);
+            const localPos = vec3.create();
+            vec3.transformMat4(localPos, intersection, invMatrix);
+            return Math.abs(localPos[0]) <= 0.25 && Math.abs(localPos[1]) <= 0.25; // Match plane size (0.5m)
+          }
+        }
+        return false;
       }
 
-      function animate() {
-        renderer.setAnimationLoop((time, frame) => {
-          if (!xrSession) {
-            logDebug('XR session inactive; stopping animation loop');
-            renderer.setAnimationLoop(null); // Stop loop
-            return;
+      function initXR() {
+        xrButton = new WebXRButton({
+          onRequestSession: onRequestSession,
+          onEndSession: onEndSession,
+          textEnterXRTitle: "START AR",
+          textXRNotFoundTitle: "AR NOT FOUND",
+          textExitXRTitle: "EXIT AR",
+        });
+        document.querySelector('header').appendChild(xrButton.domElement);
+
+        if (navigator.xr) {
+          navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+            xrButton.enabled = supported;
+          });
+        }
+
+        // Control listeners
+        document.getElementById('scale').addEventListener('input', (e) => {
+          controls.scale = parseFloat(e.target.value);
+          updatePosterTransform();
+        });
+        document.getElementById('posX').addEventListener('input', (e) => {
+          controls.posX = parseFloat(e.target.value);
+          updatePosterTransform();
+        });
+        document.getElementById('posY').addEventListener('input', (e) => {
+          controls.posY = parseFloat(e.target.value);
+          updatePosterTransform();
+        });
+        document.getElementById('posZ').addEventListener('input', (e) => {
+          controls.posZ = parseFloat(e.target.value);
+          updatePosterTransform();
+        });
+        document.getElementById('rotX').addEventListener('input', (e) => {
+          controls.rotX = parseFloat(e.target.value);
+          updatePosterTransform();
+        });
+        document.getElementById('rotY').addEventListener('input', (e) => {
+          controls.rotY = parseFloat(e.target.value);
+          updatePosterTransform();
+        });
+        document.getElementById('rotZ').addEventListener('input', (e) => {
+          controls.rotZ = parseFloat(e.target.value);
+          updatePosterTransform();
+        });
+        document.getElementById('removePoster').addEventListener('click', () => {
+          if (currentPoster) {
+            scene.removeNode(currentPoster);
+            currentPoster = null;
+            document.getElementById('controls').style.display = 'none';
+            document.getElementById('guidance').style.display = 'block';
+            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 90, rotY: 0, rotZ: 0 };
+            updatePosterTransform();
           }
+        });
 
-          if (!frame) {
-            logDebug('No XR frame available');
-            return;
+        document.getElementById('toggleControls').addEventListener('click', () => {
+          const controlsPanel = document.getElementById('controlsPanel');
+          const toggleIcon = document.getElementById('toggleIcon');
+          if (controlsPanel.style.display === 'none') {
+            controlsPanel.style.display = 'block';
+            toggleIcon.textContent = '-';
+          } else {
+            controlsPanel.style.display = 'none';
+            toggleIcon.textContent = '+';
           }
+        });
 
-          const pose = frame.getViewerPose(referenceSpace);
-          if (!pose) {
-            logDebug('No viewer pose available');
-            reticle.visible = false;
-            return;
-          }
-
-          reticle.visible = false;
-          document.getElementById('guidance').style.display = 'block';
-
-          if (hitTestSource && !poster) {
-            const hitTestResults = frame.getHitTestResults(hitTestSource);
-            logDebug(`Hit test results: ${hitTestResults.length}`);
-            if (hitTestResults.length > 0) {
-              const hit = hitTestResults[0].getPose(referenceSpace);
-              reticle.matrix.fromArray(hit.transform.matrix);
-              reticle.matrix.decompose(reticle.position, reticle.quaternion, reticle.scale);
-              reticle.visible = true;
-              document.getElementById('guidance').style.display = 'none';
-              logDebug(`Reticle position: [${reticle.position.x.toFixed(3)}, ${reticle.position.y.toFixed(3)}, ${reticle.position.z.toFixed(3)}]`);
+        // Touch controls
+        const canvas = document.querySelector('canvas');
+        if (canvas) {
+          canvas.addEventListener('touchstart', (e) => {
+            if (!currentPoster || !lastPose) return;
+            e.preventDefault();
+            const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
+            if (e.touches.length === 1 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
+              isDragging = true;
+              lastTouchX = touchX;
+              lastTouchY = touchY;
+            } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
+              isPinching = true;
+              const dx = e.touches[1].clientX - e.touches[0].clientX;
+              const dy = e.touches[1].clientY - e.touches[0].clientY;
+              initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+              initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
             }
-          }
+          });
 
-          renderer.render(scene, camera);
+          canvas.addEventListener('touchmove', (e) => {
+            if (!currentPoster) return;
+            e.preventDefault();
+            if (isDragging && e.touches.length === 1) {
+              const touchX = e.touches[0].clientX;
+              const touchY = e.touches[0].clientY;
+              const deltaX = touchX - lastTouchX;
+              const deltaY = touchY - lastTouchY;
+              controls.rotY += deltaX * 0.5;
+              controls.rotX += deltaY * 0.5;
+              lastTouchX = touchX;
+              lastTouchY = touchY;
+              updatePosterTransform();
+            } else if (isPinching && e.touches.length === 2) {
+              const dx = e.touches[1].clientX - e.touches[0].clientX;
+              const dy = e.touches[1].clientY - e.touches[0].clientY;
+              const currentDistance = Math.sqrt(dx * dx + dy * dy);
+              const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+              const scaleChange = currentDistance / initialPinchDistance;
+              controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
+              controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
+              initialPinchDistance = currentDistance;
+              initialPinchAngle = currentAngle;
+              updatePosterTransform();
+            }
+          });
+
+          canvas.addEventListener('touchend', () => {
+            isDragging = false;
+            isPinching = false;
+          });
+        }
+      }
+
+      function onRequestSession() {
+        return navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['local', 'dom-overlay'],
+          optionalFeatures: ['hit-test'],
+          domOverlay: { root: document.body }
+        }).then((session) => {
+          xrButton.setSession(session);
+          onSessionStarted(session);
+        }).catch((error) => {
+          logDebug(`AR Session Error: ${error.message}`);
+          alert(`AR Session Error: ${error.message}`);
         });
       }
 
-      function placePoster() {
-        if (reticle.visible && !poster) {
-          const geometry = new THREE.PlaneGeometry(0.5, 0.5);
-          const texture = new THREE.TextureLoader().load(
-            'media/images/wallart.png',
-            () => {
-              logDebug('Image loaded successfully');
-              texture.needsUpdate = true;
-            },
-            undefined,
-            (err) => {
-              logDebug(`Image load error: ${err.message || 'Failed to load image'}`);
+      function onSessionStarted(session) {
+        session.addEventListener('end', onSessionEnded);
+        session.addEventListener('select', onSelect);
+
+        if (!gl) {
+          try {
+            gl = createWebGLContext({
+              xrCompatible: true,
+              alpha: true
+            });
+            if (!gl) {
+              logDebug('Failed to create WebGL context');
+              session.end();
+              return;
             }
-          );
-          const material = new THREE.MeshBasicMaterial({
-            map: texture,
-            transparent: true,
-            side: THREE.DoubleSide,
+            // Set global WebGL states
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.enable(gl.DEPTH_TEST);
+            gl.depthFunc(gl.LEQUAL);
+            renderer = new Renderer(gl);
+            scene.setRenderer(renderer);
+            logDebug('WebGL context and renderer created');
+          } catch (error) {
+            logDebug(`WebGL Error: ${error.message}`);
+            session.end();
+            return;
+          }
+
+          // Initialize wall art plane after WebGL context
+          wallArt = createImagePlaneNode('media/images/wallart.png');
+          wallArt.onLoad = () => logDebug('Wall art PNG initialized');
+          wallArt.onError = (error) => logDebug(`Error initializing wall art: ${error}`);
+          arObject.addNode(wallArt);
+        }
+
+        try {
+          session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+        } catch (error) {
+          logDebug(`XRWebGLLayer Error: ${error.message}`);
+          session.end();
+          return;
+        }
+
+        session.requestReferenceSpace('viewer').then((refSpace) => {
+          xrViewerSpace = refSpace;
+          session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
+            xrHitTestSource = hitTestSource;
+            logDebug('Hit test source created');
+          }).catch((error) => {
+            logDebug(`HitTest Error: ${error.message}`);
           });
-          poster = new THREE.Mesh(geometry, material);
-          poster.position.copy(reticle.position);
-          poster.quaternion.copy(reticle.quaternion);
-          scene.add(poster);
-          document.getElementById('guidance').style.display = 'none';
-          logDebug(`Poster placed at [${poster.position.x.toFixed(3)}, ${poster.position.y.toFixed(3)}, ${poster.position.z.toFixed(3)}]`);
+        });
+
+        session.requestReferenceSpace('local').then((refSpace) => {
+          xrRefSpace = refSpace;
+          session.requestAnimationFrame(onXRFrame);
+          logDebug('XR session started successfully');
+        }).catch((error) => {
+          logDebug(`RefSpace Error: ${error.message}`);
+        });
+
+        document.getElementById('guidance').style.display = 'block';
+      }
+
+      function onEndSession(session) {
+        if (xrHitTestSource) {
+          xrHitTestSource.cancel();
+          xrHitTestSource = null;
+        }
+        session.end();
+      }
+
+      function onSessionEnded(event) {
+        xrButton.setSession(null);
+        logDebug('XR session ended');
+      }
+
+      function addARObjectAt(matrix) {
+        if (currentPoster) return;
+
+        logDebug('Attempting to place poster');
+        let hitMatrix = mat4.clone(matrix);
+        let position = vec3.create();
+        let rotation = quat.create();
+        mat4.getTranslation(position, hitMatrix);
+        mat4.getRotation(rotation, hitMatrix);
+
+        let upVector = vec3.fromValues(0, 1, 0);
+        vec3.transformQuat(upVector, upVector, rotation);
+        vec3.normalize(upVector, upVector);
+
+        let surfaceNormal = vec3.create();
+        let surfaceType = '';
+        if (Math.abs(upVector[1]) > 0.7) {
+          surfaceNormal = vec3.clone(upVector);
+          surfaceType = 'Floor';
+        } else {
+          let viewerForward = vec3.fromValues(0, 0, -1);
+          vec3.transformQuat(viewerForward, viewerForward, rotation);
+          surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
+          vec3.normalize(surfaceNormal, surfaceNormal);
+          vec3.negate(surfaceNormal, surfaceNormal);
+          surfaceType = 'Wall';
+        }
+
+        if (surfaceType !== 'Wall') {
+          logDebug('Not placing on wall surface');
+          return;
+        }
+
+        let modelZ = vec3.fromValues(0, 0, -1);
+        let alignRotation = quat.create();
+        quat.rotationTo(alignRotation, modelZ, surfaceNormal);
+
+        let finalMatrix = mat4.create();
+        let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01);
+        vec3.add(position, position, offset);
+        mat4.fromRotationTranslation(finalMatrix, rotation, position);
+        mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
+
+        let newObject = arObject.clone();
+        newObject.visible = true;
+        currentPoster = newObject;
+        baseMatrix = mat4.clone(finalMatrix);
+
+        updatePosterTransform();
+        scene.addNode(newObject);
+
+        logDebug('Poster placed successfully');
+        document.getElementById('controls').style.display = 'block';
+        document.getElementById('guidance').style.display = 'none';
+      }
+
+      function onSelect(event) {
+        if (reticle.visible) {
+          addARObjectAt(reticle.matrix);
         }
       }
 
-      // Event listeners
-      document.getElementById('start-ar').addEventListener('click', startXR);
-      renderer.domElement.addEventListener('click', placePoster);
+      function onXRFrame(t, frame) {
+        let session = frame.session;
+        let pose = frame.getViewerPose(xrRefSpace);
+        lastPose = pose;
 
-      // Handle window resize
-      window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      });
+        reticle.visible = false;
+        document.getElementById('guidance').style.display = currentPoster ? 'none' : 'block';
+
+        if (xrHitTestSource && pose && !currentPoster) {
+          let hitTestResults = frame.getHitTestResults(xrHitTestSource);
+          logDebug(`Hit test results: ${hitTestResults.length}`);
+          if (hitTestResults.length > 0) {
+            let hitPose = hitTestResults[0].getPose(xrRefSpace);
+            let hitMatrix = hitPose.transform.matrix;
+            let position = vec3.create();
+            let rotation = quat.create();
+            mat4.getTranslation(position, hitMatrix);
+            mat4.getRotation(rotation, hitMatrix);
+
+            let upVector = vec3.fromValues(0, 1, 0);
+            vec3.transformQuat(upVector, upVector, rotation);
+            vec3.normalize(upVector, upVector);
+
+            let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
+
+            if (surfaceType === 'Wall') {
+              reticle.visible = true;
+              reticle.matrix = hitMatrix;
+              document.getElementById('guidance').style.display = 'none');
+              logDebug('Reticle visible on wall');
+            }
+          }
+        }
+
+        scene.startFrame();
+        session.requestAnimationFrame(onXRFrame);
+        scene.drawXRFrame(frame, pose);
+        scene.endFrame();
+      }
+
+      initXR();
     </script>
   </body>
 </html>
