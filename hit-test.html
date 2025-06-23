@@ -18,10 +18,9 @@
         background: rgba(0, 0, 0, 0.7);
         color: white;
         padding: 10px 20px;
-        border-radius: 0px;
-        z-index: 1;
-        font-family: monospace;
-        font-size: 12px;
+        border-radius: 5px;
+        z-index: 1000;
+        font-family: Arial, sans-serif;
         display: none;
       }
       #debug {
@@ -30,32 +29,21 @@
         left: 0;
         background: rgba(0,0,0,0.7);
         color: white;
-        padding: 4px;
-        z-index: 1;
+        padding: 10px;
+        z-index: 1000;
         font-family: monospace;
-        font-size: 10px;
+        font-size: 14px;
         max-width: 100%;
         overflow: auto;
         max-height: 100px;
       }
-      .back {
-        position: fixed;
-        top: 4px;
-        right: 4px;
-        background: none;
-        color: black;
-        padding: 4px 8px;
-        z-index: 0;
-        font-family: monospace;
-        font-size: 12px;
-      }
     </style>
-    <title>Arrow AR Art</title>
+    <title>AR Wall Art</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>Arrow AR Art</summary>
+        <summary>AR Wall Art</summary>
         <p>
           Point at a wall to see the blue reticle, then tap to place your artwork. 
           Use controls to adjust position and rotation.
@@ -169,35 +157,34 @@
       let initialPinchDistance = 0;
       let initialPinchAngle = 0;
 
-      // Define shaders for the textured plane
+      // Define simplified shaders for the textured plane
       const vertexShaderSource = `
         precision highp float;
-        attribute vec3 POSITION;
-        attribute vec2 TEXCOORD_0;
-        uniform mat4 PROJECTION_MATRIX;
-        uniform mat4 VIEW_MATRIX;
-        uniform mat4 MODEL_MATRIX;
-        varying vec2 vTexCoord;
-        void vertex_main(mat4 proj, mat4 view, mat4 model) {
-          vTexCoord = TEXCOORD_0;
-          gl_Position = proj * view * model * vec4(POSITION, 1.0);
+        attribute vec3 a_position;
+        attribute vec2 a_texcoord;
+        uniform mat4 u_projectionMatrix;
+        uniform mat4 u_viewMatrix;
+        uniform mat4 u_modelMatrix;
+        varying vec2 v_texCoord;
+        void main() {
+          v_texCoord = a_texcoord;
+          gl_Position = u_projectionMatrix * u_viewMatrix * u_modelMatrix * vec4(a_position, 1.0);
         }
       `;
 
       const fragmentShaderSource = `
         precision highp float;
-        varying vec2 vTexCoord;
-        uniform sampler2D uTexture;
-        vec4 fragment_main() {
-          vec4 color = texture2D(uTexture, vTexCoord);
-          if (color.a < 0.1) discard; // Discard low-alpha pixels for transparency
-          return color;
+        varying vec2 v_texCoord;
+        uniform sampler2D u_texture;
+        void main() {
+          gl_FragColor = texture2D(u_texture, v_texCoord);
+          // gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); // Uncomment for solid red test
         }
       `;
 
       function createImagePlaneNode(imageUrl) {
         const planeNode = new Node();
-        planeNode.name = 'ImagePlane'; // For debugging
+        planeNode.name = 'ImagePlane';
 
         // Create canvas for texture
         const canvas = document.createElement('canvas');
@@ -205,7 +192,6 @@
         canvas.height = 512;
         const ctx = canvas.getContext('2d');
         
-        // Create a test pattern while image loads
         ctx.fillStyle = '#4A90E2';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#FFFFFF';
@@ -249,14 +235,10 @@
           logDebug('Image failed to load, using fallback');
           ctx.fillStyle = '#FF6B6B';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = '#4ECDC4';
-          ctx.fillRect(50, 50, canvas.width-100, canvas.height-100);
-          ctx.fillStyle = '#45B7D1';
-          ctx.fillRect(100, 100, canvas.width-200, canvas.height-200);
           ctx.fillStyle = '#FFFFFF';
           ctx.font = '32px Arial';
           ctx.textAlign = 'center';
-          ctx.fillText('AR Artwork', canvas.width/2, canvas.height/2);
+          ctx.fillText('Failed', canvas.width/2, canvas.height/2);
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
         };
@@ -291,9 +273,8 @@
         });
         const textureObj = new Texture('planeTexture', texture, sampler);
         const material = new Material('TexturedPlane', vertexShaderSource, fragmentShaderSource);
-        material.addSampler('uTexture', textureObj);
+        material.addSampler('u_texture', textureObj);
         
-        // Set material states using property setters
         material.state.blend = true;
         material.state.depthTest = true;
         material.state.cullFace = false;
@@ -301,6 +282,41 @@
         material.state.blendFuncDst = gl.ONE_MINUS_SRC_ALPHA;
         
         logDebug(`Material states set: blend=${material.state.blend}, depthTest=${material.state.depthTest}, cullFace=${material.state.cullFace}`);
+
+        // Create and compile shaders for debugging
+        const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vertexShader, vertexShaderSource);
+        gl.compileShader(vertexShader);
+        if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
+          logDebug(`Vertex shader compilation error: ${gl.getShaderInfoLog(vertexShader)}`);
+          return null;
+        }
+
+        const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fragmentShader, fragmentShaderSource);
+        gl.compileShader(fragmentShader);
+        if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
+          logDebug(`Fragment shader compilation error: ${gl.getShaderInfoLog(fragmentShader)}`);
+          return null;
+        }
+
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          logDebug(`Program linking error: ${gl.getProgramInfoLog(program)}`);
+          return null;
+        }
+
+        // Log attribute and uniform locations
+        const positionLoc = gl.getAttribLocation(program, 'a_position');
+        const texCoordLoc = gl.getAttribLocation(program, 'a_texcoord');
+        const projMatrixLoc = gl.getUniformLocation(program, 'u_projectionMatrix');
+        const viewMatrixLoc = gl.getUniformLocation(program, 'u_viewMatrix');
+        const modelMatrixLoc = gl.getUniformLocation(program, 'u_modelMatrix');
+        const textureLoc = gl.getUniformLocation(program, 'u_texture');
+        logDebug(`Shader bindings: a_position=${positionLoc}, a_texcoord=${texCoordLoc}, u_projectionMatrix=${projMatrixLoc}, u_viewMatrix=${viewMatrixLoc}, u_modelMatrix=${modelMatrixLoc}, u_texture=${textureLoc}`);
 
         // Create mesh
         const mesh = renderer.createSimpleMesh({}, {
@@ -344,6 +360,11 @@
         mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
 
         currentPoster.matrix = transformMatrix;
+
+        // Log world position
+        let worldPos = vec3.create();
+        mat4.getTranslation(worldPos, transformMatrix);
+        logDebug(`Poster World Position: [${worldPos[0]}, ${worldPos[1]}, ${worldPos[2]}]`);
 
         // Update sliders
         document.getElementById('scale').value = controls.scale;
@@ -571,10 +592,10 @@
               session.end();
               return;
             }
-            // Set WebGL states
-            gl.enable(gl.DEPTH_TEST);
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            // Set WebGL states (commented out for testing)
+            // gl.enable(gl.DEPTH_TEST);
+            // gl.enable(gl.BLEND);
+            // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
             renderer = new Renderer(gl);
             scene.setRenderer(renderer);
             logDebug('WebGL context and renderer created');
@@ -623,7 +644,7 @@
         session.end();
       }
 
-      function onSessionEnded(event) {
+      function onSessionEnded() {
         xrButton.setSession(null);
         logDebug('XR session ended');
       }
@@ -632,7 +653,6 @@
         if (currentPoster) return;
 
         logDebug('Attempting to place artwork');
-        
         try {
           let hitMatrix = mat4.clone(matrix);
           let position = vec3.create();
@@ -673,12 +693,16 @@
           mat4.fromRotationTranslation(finalMatrix, rotation, position);
           mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
-          let yRotationQuat = quat.create();
-          quat.fromEuler(yRotationQuat, 0, 90, 0);
-          let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
+          let yRotation = quat.create();
+          quat.fromEuler(yRotation, 0, 90, 0);
+          let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotation);
           mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
 
-          let newObject = createImagePlaneNode('https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/640px-PNG_transparency_demonstration_1.png');
+          let newObject = createImagePlaneNode('https://upload.wikimedia.org/wiki/commons/thumb/4/47/PNG_transparency_demonstration_1.png/640px-PNG_transparency_demonstration_1.png');
+          if (!newObject) {
+            logDebug('Failed to create plane node');
+            return;
+          }
           newObject.visible = true;
           currentPoster = newObject;
           baseMatrix = mat4.clone(finalMatrix);
@@ -687,6 +711,7 @@
           scene.addNode(newObject);
           
           logDebug('Artwork placed successfully');
+          logDebug(`Scene children: ${scene.children.length}`);
 
           document.getElementById('controls').style.display = 'block';
           document.getElementById('guidance').style.display = 'none';
