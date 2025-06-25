@@ -42,17 +42,34 @@
       #debugConsole p {
         margin: 2px 0;
       }
+      #xrButtonContainer {
+        margin-top: 10px;
+      }
+      #noXRMessage {
+        position: none;
+        top: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(255, 0, 0, 0.7);
+        color: white;
+        padding: 10px;
+        border-radius: 5px;
+        display: none;
+        z-index: 10;
+      }
     </style>
-    <title>Hit Test</title>
+    <title>Hit Test AR</title>
   </head>
   <body>
-    <header>
+    <header id="header">
       <details open>
-        <summary>Hit Test</summary>
+        <summary>Hit Test AR</summary>
         <p>
-          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Z axis) to adjust. Click "Remove Poster" to place a new one.
+          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Y axis) to adjust. Click "Remove Poster" to place a new one.
           <a class="back" href="./">Back</a>
         </p>
+        <div id="xrButtonContainer"></div>
+        <div id="noXRMessage">AR not supported on this browser or device. Try Chrome on an ARCore-supported Android device.</div>
       </details>
     </header>
     <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
@@ -315,159 +332,64 @@
       }
 
       function initXR() {
-        console.log('Initializing WebXR');
-        xrButton = new WebXRButton({
-          onRequestSession: onRequestSession,
-          onEndSession: onEndSession,
-          textEnterXRTitle: "START AR",
-          textXRNotFoundTitle: "AR NOT FOUND",
-          textExitXRTitle: "EXIT AR",
-        });
-        document.querySelector('header').appendChild(xrButton.domElement);
+        console.log('Starting initXR');
+        try {
+          const header = document.querySelector('header');
+          const xrButtonContainer = document.getElementById('xrButtonContainer');
+          const noXRMessage = document.getElementById('noXRMessage');
 
-        if (navigator.xr) {
-          navigator.xr.isSessionSupported('immersive-ar')
-            .then((supported) => {
-              console.log('AR support:', supported);
-              xrButton.enabled = supported;
-            })
-            .catch((error) => {
-              console.error('Error checking AR support:', error);
-            });
-        } else {
-          console.log('WebXR not available in this browser');
-        }
-
-        // Setup control listeners
-        document.getElementById('scale').addEventListener('input', (e) => {
-          controls.scale = parseFloat(e.target.value);
-          console.log('Scale updated:', controls.scale);
-          updatePosterTransform();
-        });
-        document.getElementById('posX').addEventListener('input', (e) => {
-          controls.posX = parseFloat(e.target.value);
-          console.log('PosX updated:', controls.posX);
-          updatePosterTransform();
-        });
-        document.getElementById('posY').addEventListener('input', (e) => {
-          controls.posY = parseFloat(e.target.value);
-          console.log('PosY updated:', controls.posY);
-          updatePosterTransform();
-        });
-        document.getElementById('posZ').addEventListener('input', (e) => {
-          controls.posZ = parseFloat(e.target.value);
-          console.log('PosZ updated:', controls.posZ);
-          updatePosterTransform();
-        });
-        document.getElementById('rotX').addEventListener('input', (e) => {
-          controls.rotX = parseFloat(e.target.value);
-          console.log('RotX updated:', controls.rotX);
-          updatePosterTransform();
-        });
-        document.getElementById('rotY').addEventListener('input', (e) => {
-          controls.rotY = parseFloat(e.target.value);
-          console.log('RotY updated:', controls.rotY);
-          updatePosterTransform();
-        });
-        document.getElementById('rotZ').addEventListener('input', (e) => {
-          controls.rotZ = parseFloat(e.target.value);
-          console.log('RotZ updated:', controls.rotZ);
-          updatePosterTransform();
-        });
-        document.getElementById('removePoster').addEventListener('click', () => {
-          if (currentPoster) {
-            console.log('Removing poster:', currentPoster);
-            scene.removeNode(currentPoster);
-            currentPoster = null;
-            document.getElementById('controls').style.display = 'none';
-            document.getElementById('guidance').style.display = 'block';
-            // Reset controls
-            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
-            updatePosterTransform();
+          if (!header || !xrButtonContainer) {
+            console.error('Header or XR button container not found');
+            return;
           }
-        });
 
-        // Setup minimize/maximize toggle
-        document.getElementById('toggleControls').addEventListener('click', () => {
-          const controlsPanel = document.getElementById('controlsPanel');
-          const toggleIcon = document.getElementById('toggleIcon');
-          if (controlsPanel.style.display === 'none') {
-            controlsPanel.style.display = 'block';
-            toggleIcon.textContent = '-';
-            console.log('Controls panel expanded');
+          xrButton = new WebXRButton({
+            onRequestSession: onRequestSession,
+            onEndSession: onEndSession,
+            textEnterXRTitle: "START AR",
+            textXRNotFoundTitle: "AR NOT FOUND",
+            textExitXRTitle: "EXIT AR",
+          });
+
+          // Ensure button is visible
+          xrButton.domElement.style.display = 'block';
+          xrButton.domElement.style.margin = '10px 0';
+          xrButton.domElement.style.padding = '10px 20px';
+          xrButton.domElement.style.backgroundColor = '#2563eb';
+          xrButton.domElement.style.color = 'white';
+          xrButton.domElement.style.borderRadius = '5px';
+          xrButton.domElement.style.border = 'none';
+          xrButton.domElement.style.cursor = 'pointer';
+
+          xrButtonContainer.appendChild(xrButton.domElement);
+          console.log('XR button appended:', xrButton.domElement);
+
+          if (navigator.xr) {
+            console.log('WebXR API available');
+            navigator.xr.isSessionSupported('immersive-ar')
+              .then((supported) => {
+                console.log('Immersive AR supported:', supported);
+                xrButton.enabled = supported;
+                if (!supported) {
+                  noXRMessage.style.display = 'block';
+                  console.log('Showing no XR message');
+                }
+              })
+              .catch((error) => {
+                console.error('Error checking immersive-ar support:', error);
+                xrButton.enabled = false;
+                noXRMessage.style.display = 'block';
+              });
           } else {
-            controlsPanel.style.display = 'none';
-            toggleIcon.textContent = '+';
-            console.log('Controls panel minimized');
+            console.log('WebXR API not available');
+            xrButton.enabled = false;
+            xrButton.domElement.textContent = 'AR NOT FOUND';
+            noXRMessage.style.display = 'block';
           }
-        });
 
-        // Setup touch controls on canvas
-        const canvas = document.querySelector('canvas');
-        if (canvas) {
-          console.log('Canvas found, setting up touch controls');
-          canvas.addEventListener('touchstart', (e) => {
-            if (!currentPoster || !lastPose) {
-              console.log('Touchstart skipped: no poster or pose');
-              return;
-            }
-            e.preventDefault();
-            const touchX = e.touches[0].clientX;
-            const touchY = e.touches[0].clientY;
-            if (e.touches.length === 1 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
-              isDragging = true;
-              lastTouchX = touchX;
-              lastTouchY = touchY;
-              console.log('Dragging started at:', { touchX, touchY });
-            } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
-              isPinching = true;
-              const dx = e.touches[1].clientX - e.touches[0].clientX;
-              const dy = e.touches[1].clientY - e.touches[0].clientY;
-              initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-              initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
-              console.log('Pinching started:', { initialPinchAngle, initialPinchDistance });
-            }
-          });
-
-          canvas.addEventListener('touchmove', (e) => {
-            if (!currentPoster) {
-              console.log('Touchmove skipped: no poster');
-              return;
-            }
-            e.preventDefault();
-            if (isDragging && e.touches.length === 1) {
-              const touchX = e.touches[0].clientX;
-              const touchY = e.touches[0].clientY;
-              const deltaX = touchX - lastTouchX;
-              const deltaY = touchY - lastTouchY;
-              controls.rotY += deltaX * 0.5;
-              controls.rotX += deltaY * 0.5;
-              lastTouchX = touchX;
-              lastTouchY = touchY;
-              console.log('Dragging:', { deltaX, deltaY, rotX: controls.rotX, rotY: controls.rotY });
-              updatePosterTransform();
-            } else if (isPinching && e.touches.length === 2) {
-              const dx = e.touches[1].clientX - e.touches[0].clientX;
-              const dy = e.touches[1].clientY - e.touches[0].clientY;
-              const currentDistance = Math.sqrt(dx * dx + dy * dy);
-              const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-              const scaleChange = currentDistance / initialPinchDistance;
-              controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
-              controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
-              initialPinchDistance = currentDistance;
-              initialPinchAngle = currentAngle;
-              console.log('Pinching:', { scale: controls.scale, rotZ: controls.rotZ });
-              updatePosterTransform();
-            }
-          });
-
-          canvas.addEventListener('touchend', (e) => {
-            isDragging = false;
-            isPinching = false;
-            console.log('Touch ended');
-          });
-        } else {
-          console.log('Canvas not found');
+          console.log('initXR completed');
+        } catch (error) {
+          console.error('initXR error:', error);
         }
       }
 
@@ -529,7 +451,7 @@
           xrViewerSpace = refSpace;
           console.log('Viewer reference space acquired');
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
-            xrHitTestSource = hitTestSource;
+            xrHitTestimonialSource = hitTestSource;
             console.log('Hit test source acquired');
           }).catch((error) => {
             console.error('Hit test source error:', error);
@@ -550,18 +472,19 @@
         document.getElementById('guidance').style.display = 'block';
       }
 
-      function onEndSession(session) {
+      function onEndSession() {
         if (xrHitTestSource) {
           xrHitTestSource.cancel();
           xrHitTestSource = null;
           console.log('Hit test source canceled');
         }
         session.end();
-        console.log('AR session ended');
+        console.log('Session ended');
       }
 
-      function onSessionEnded(event) {
+      function onSessionEnded() {
         xrButton.setSession(null);
+        document.getElementById('noXRMessage').style.display = 'none';
         console.log('Session ended event');
       }
 
@@ -578,7 +501,7 @@
         mat4.getRotation(rotation, hitMatrix);
 
         let upVector = vec3.fromValues(0, 1, 0);
-        vec3.transformQuat(upVector, upVector, rotation);
+        vec3.transformQuat(upVector, upVector);
         vec3.normalize(upVector, upVector);
 
         let surfaceNormal = vec3.create();
@@ -647,6 +570,7 @@
       }
 
       function onXRFrame(t, frame) {
+        console.log('Rendering frame started');
         let session = frame.session;
         let pose = frame.getViewerPose(xrRefSpace);
         lastPose = pose;
@@ -670,7 +594,7 @@
             vec3.normalize(upVector, upVector);
 
             let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
-            console.log('Hit test surface:', { surfaceType, position });
+            console.log('Surface detected:', { surfaceType, hitMatrix });
 
             if (surfaceType === 'Wall') {
               reticle.visible = true;
