@@ -163,6 +163,8 @@
           0, 2, 3,
         ]);
 
+        logDebug(`Vertices: ${vertices.length / 3}, Indices: ${indices.length}`);
+
         const vertexShader = `
           precision highp float;
           attribute vec3 POSITION;
@@ -188,17 +190,20 @@
           cullFace: false
         };
 
-        const mesh = renderer.createSimpleMesh({}, {
-          positions: vertices,
-          indices: indices
-        }, material);
+        try {
+          const mesh = renderer.createSimpleMesh({}, {
+            positions: vertices,
+            indices: indices
+          }, material);
+          logDebug('Debug plane mesh created');
 
-        planeNode.addRenderPrimitive(renderer.createRenderPrimitive(
-          renderer.createPrimitiveFromMesh(mesh),
-          material
-        ));
+          const primitive = renderer.createPrimitiveFromMesh(mesh);
+          planeNode.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
+          logDebug(`Debug plane node created with ${planeNode.renderPrimitives.length} primitives`);
+        } catch (error) {
+          logDebug(`Error creating debug plane mesh: ${error.message}`);
+        }
 
-        logDebug('Debug plane node created');
         return planeNode;
       }
 
@@ -233,7 +238,7 @@
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         checkGLErrors(gl);
-        checkTexture(gl, texture); // Check texture state
+        checkTexture(gl, texture);
         logDebug('WebGL texture created');
 
         // Debug: Draw texture to a visible canvas
@@ -277,10 +282,9 @@
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
           gl.generateMipmap(gl.TEXTURE_2D);
           checkGLErrors(gl);
-          checkTexture(gl, texture); // Check texture state after update
+          checkTexture(gl, texture);
           logDebug('Texture updated with loaded image');
 
-          // Update debug canvas
           debugCtx.drawImage(img, 0, 0, 200, 200);
           logDebug('Debug canvas updated with loaded image');
         };
@@ -388,6 +392,45 @@
         testImg.onload = () => logDebug('Test image loaded successfully');
         testImg.onerror = () => logDebug('Test image failed to load');
         testImg.src = 'media/images/wallart.png';
+      }
+
+      // Fallback 2D rendering test
+      function test2DRendering() {
+        if (!gl) {
+          gl = createWebGLContext({ alpha: true });
+          renderer = new Renderer(gl);
+          scene.setRenderer(renderer);
+        }
+
+        const debugPlane = createDebugPlaneNode([1, 0, 0, 1]);
+        debugPlane.matrix = mat4.fromTranslation(mat4.create(), [0, 0, -1]);
+        scene.addNode(debugPlane);
+
+        const canvas = gl.canvas;
+        canvas.style.position = 'absolute';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        document.body.appendChild(canvas);
+
+        function render2DFrame() {
+          gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+          gl.clearColor(0, 0, 0, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+          const projectionMatrix = mat4.create();
+          mat4.perspective(projectionMatrix, 60 * Math.PI / 180, gl.canvas.width / gl.canvas.height, 0.1, 100);
+          const viewMatrix = mat4.create();
+          mat4.lookAt(viewMatrix, [0, 0, 0], [0, 0, -1], [0, 1, 0]);
+
+          scene.startFrame();
+          scene.draw(projectionMatrix, viewMatrix);
+          scene.endFrame();
+
+          requestAnimationFrame(render2DFrame);
+        }
+
+        render2DFrame();
+        logDebug('Started 2D rendering test');
       }
 
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
@@ -522,7 +565,14 @@
         if (navigator.xr) {
           navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
             xrButton.enabled = supported;
+            if (!supported) {
+              logDebug('AR not supported, falling back to 2D rendering');
+              test2DRendering();
+            }
           });
+        } else {
+          logDebug('WebXR not available, falling back to 2D rendering');
+          test2DRendering();
         }
 
         // Control listeners
@@ -631,7 +681,6 @@
           });
         }
 
-        // Run image loading test on initialization
         testImageLoading();
       }
 
@@ -679,7 +728,7 @@
         }
 
         try {
-          session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+          session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl, { alpha: true }) });
         } catch (error) {
           logDebug(`XRWebGLLayer Error: ${error.message}`);
           session.end();
@@ -730,6 +779,8 @@
         mat4.getTranslation(position, hitMatrix);
         mat4.getRotation(rotation, hitMatrix);
 
+        logDebug(`Hit matrix position: [${position[0].toFixed(3)}, ${position[1].toFixed(3)}, ${position[2].toFixed(3)}]`);
+
         let upVector = vec3.fromValues(0, 1, 0);
         vec3.transformQuat(upVector, upVector, rotation);
         vec3.normalize(upVector, upVector);
@@ -763,16 +814,29 @@
         mat4.fromRotationTranslation(finalMatrix, rotation, position);
         mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
+        logDebug(`Final matrix position: [${position[0].toFixed(3)}, ${position[1].toFixed(3)}, ${position[2].toFixed(3)}]`);
+        logDebug(`Final matrix: ${finalMatrix}`);
+
+        // Fallback: Test with a fixed position (1m in front of camera)
+        let fallbackMatrix = mat4.create();
+        mat4.fromTranslation(fallbackMatrix, [0, 0, -1]);
+        logDebug('Testing with fallback matrix at [0, 0, -1]');
+
         // First try with debug plane (red)
         const debugPlane = createDebugPlaneNode([1, 0, 0, 1]);
-        debugPlane.matrix = finalMatrix;
+        debugPlane.matrix = finalMatrix; // Try hit matrix first
+        // debugPlane.matrix = fallbackMatrix; // Uncomment to test fallback position
         scene.addNode(debugPlane);
-        logDebug('Debug plane added to scene');
+        logDebug(`Debug plane added to scene. Scene nodes: ${scene.children.length}`);
 
         // After 3 seconds, replace with the actual image
         setTimeout(() => {
-          scene.removeNode(debugPlane);
-          logDebug('Debug plane removed');
+          if (scene.children.includes(debugPlane)) {
+            scene.removeNode(debugPlane);
+            logDebug('Debug plane removed');
+          } else {
+            logDebug('Debug plane not found in scene for removal');
+          }
 
           const newPoster = new Node();
           newPoster.name = 'Poster';
@@ -780,7 +844,8 @@
           const newWallArt = createImagePlaneNode('media/images/wallart.png');
           newWallArt.visible = true;
           newPoster.addNode(newWallArt);
-          newPoster.matrix = finalMatrix;
+          newPoster.matrix = finalMatrix; // Use same matrix
+          // newPoster.matrix = fallbackMatrix; // Uncomment to test fallback position
           currentPoster = newPoster;
           baseMatrix = mat4.clone(finalMatrix);
 
@@ -788,7 +853,7 @@
           scene.addNode(newPoster);
 
           logDebug(`Poster node added with ${newPoster.children.length} children, ${newWallArt.renderPrimitives.length} primitives`);
-          logDebug('Poster placed successfully');
+          logDebug(`Scene nodes after poster added: ${scene.children.length}`);
           document.getElementById('controls').style.display = 'block';
           document.getElementById('guidance').style.display = 'none';
         }, 3000);
@@ -839,6 +904,7 @@
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(gl.LEQUAL);
+        checkGLErrors(gl);
 
         // Debug rendering state
         logDebug(`Rendering frame with poster: ${currentPoster ? 'Yes' : 'No'}`);
@@ -846,11 +912,25 @@
           logDebug(`Poster visibility: ${currentPoster.visible}`);
           logDebug(`Poster matrix: ${currentPoster.matrix}`);
         }
+        logDebug(`Scene nodes: ${scene.children.length}`);
+        scene.children.forEach((node, i) => {
+          logDebug(`Node ${i}: ${node.name}, Visible: ${node.visible}`);
+        });
+
+        // Log view/projection matrices if pose exists
+        if (pose && pose.views.length > 0) {
+          const viewMatrix = pose.views[0].transform.inverse.matrix;
+          const projectionMatrix = pose.views[0].projectionMatrix;
+          logDebug(`View matrix: ${viewMatrix}`);
+          logDebug(`Projection matrix: ${projectionMatrix}`);
+        }
 
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
         scene.drawXRFrame(frame, pose);
         scene.endFrame();
+
+        checkGLErrors(gl);
       }
 
       initXR();
