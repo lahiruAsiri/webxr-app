@@ -86,53 +86,52 @@
     <title>Hit Test AR</title>
   </head>
   <body>
-    <canvas id="webgl-canvas" style="width:100%;height:100%;position:absolute;"></canvas>
     <header id="header">
       <details open>
         <summary>Hit Test AR</summary>
         <p>
           Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Z axis) to adjust. Click "Remove Poster" to place a new one.
-          <a class="back" href="index.html">Back</a>
+          <a class="back" href="./">Back</a>
         </p>
         <div id="xrButtonContainer"></div>
         <div id="noXRMessage">AR not supported on this browser or device. Try Chrome on an ARCore-supported Android device.</div>
-        <button id="testPlaceButton">Test Place Poster</button>
+        <button id="testPlaceButton">Place Test Poster</button>
       </details>
     </header>
     <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
-    <div class="fixed bottom-4 left-2 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
+    <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
       </button>
       <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
-        <h3 class="text-lg font-semibold text-gray-800 mb-2">Poster Controls</h3>
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
         <div class="space-y-4">
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Size:</label>
             <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">X Pos:</label>
+            <label class="w-20 text-sm text-gray-600">X Position:</label>
             <input type="range" id="posX" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Y Pos:</label>
+            <label class="w-20 text-sm text-gray-600">Y Position:</label>
             <input type="range" id="posY" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Z Pos:</label>
+            <label class="w-20 text-sm text-gray-600">Z Position:</label>
             <input type="range" id="posZ" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">X Rot:</label>
+            <label class="w-20 text-sm text-gray-600">X Rotation:</label>
             <input type="range" id="rotX" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Y Rot:</label>
+            <label class="w-20 text-sm text-gray-600">Y Rotation:</label>
             <input type="range" id="rotY" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Z Rot:</label>
+            <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
             <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
           <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
@@ -294,7 +293,7 @@
         mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
 
         currentPoster.matrix = transformMatrix;
-        console.log('Poster transform updated:', { scale: controls.scale, position, rotation });
+        console.log('Poster transform updated:', { scale: controls.scale, position, rotation: controls });
 
         document.getElementById('scale').value = controls.scale;
         document.getElementById('posX').value = controls.posX;
@@ -482,7 +481,7 @@
             addARObjectAt(testMatrix);
           });
 
-          const canvas = document.getElementById('webgl-canvas');
+          const canvas = document.querySelector('canvas');
           if (canvas) {
             console.log('Canvas found, setting up touch controls');
             canvas.addEventListener('touchstart', (e) => {
@@ -546,7 +545,7 @@
               console.log('Touch ended');
             });
           } else {
-            console.error('Canvas not found, touch controls disabled');
+            console.log('Canvas not found');
           }
 
           console.log('initXR completed');
@@ -583,9 +582,7 @@
 
         if (!gl) {
           try {
-            const canvas = document.getElementById('webgl-canvas');
             gl = createWebGLContext({
-              canvas: canvas,
               xrCompatible: true,
               alpha: true
             });
@@ -599,7 +596,7 @@
             scene.setRenderer(renderer);
             console.log('WebGL context and renderer initialized');
           } catch (error) {
-            console.error('WebGL initialization error:', error);
+            console.error('WebGL error:', error);
             alert(`WebGL Error: ${error.message}`);
             session.end();
             return;
@@ -626,9 +623,6 @@
             console.error('Hit test source error:', error);
             alert(`HitTest Error: ${error.message}`);
           });
-        }).catch((error) => {
-          console.error('Viewer reference space error:', error);
-          alert(`Viewer RefSpace Error: ${error.message}`);
         });
 
         session.requestReferenceSpace('local').then((refSpace) => {
@@ -636,9 +630,11 @@
           console.log('Local reference space acquired');
           session.requestAnimationFrame(onXRFrame);
         }).catch((error) => {
-          console.error('Local reference space error:', error);
-          alert(`Local RefSpace Error: ${error.message}`);
+          console.error('Reference space error:', error);
+          alert(`RefSpace Error: ${error.message}`);
         });
+
+        document.getElementById('guidance').style.display = 'block';
       }
 
       function onEndSession(session) {
@@ -655,7 +651,7 @@
         xrButton.setSession(null);
         document.getElementById('noXRMessage').style.display = 'none';
         document.getElementById('testPlaceButton').style.display = 'block';
-        console.log('Session ended');
+        console.log('Session ended event');
       }
 
       function addARObjectAt(matrix) {
@@ -701,7 +697,7 @@
         mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
         let yRotationQuat = quat.create();
-        quat.fromEuler(yRotationQuat, 0, 180, 0);
+        quat.fromEuler(yRotationQuat, 0, 90, 0);
         let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
         mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
 
@@ -710,7 +706,7 @@
         currentPoster = newObject;
         baseMatrix = mat4.clone(finalMatrix);
 
-        console.log('Poster placed:', { position, rotation: alignRotation.toString(), finalMatrix, visible: newObject.visible });
+        console.log('Poster placed:', { position, rotation, matrix: finalMatrix, visible: newObject.visible });
 
         updatePosterTransform();
         scene.addNode(newObject);
@@ -768,14 +764,9 @@
 
         console.log('Rendering frame:', { hasPoster: !!currentPoster, reticleVisible: reticle.visible, pose: !!pose });
         scene.startFrame();
-        try {
-          scene.drawXRFrame(frame, pose);
-          console.log('Frame rendered successfully');
-        } catch (error) {
-          console.error('Rendering error:', error);
-        }
-        scene.endFrame();
         session.requestAnimationFrame(onXRFrame);
+        scene.drawXRFrame(frame, pose);
+        scene.endFrame();
       }
 
       initXR();
