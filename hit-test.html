@@ -7,6 +7,7 @@
     <meta name='apple-mobile-web-app-capable' content='yes'>
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
+    <!-- Add Tailwind CSS via CDN for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body { margin: 0; }
@@ -37,39 +38,41 @@
       </details>
     </header>
     <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
-    <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="display: none;">
+    <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
+      <!-- Minimize/Maximize toggle button -->
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
       </button>
+      <!-- Controls panel -->
       <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
         <div class="space-y-4">
           <div class="flex items-center space-x-4">
-            <label class="scale-label w-20 text-sm text-gray-600">Size:</label>
+            <label class="w-20 text-sm text-gray-600">Size:</label>
             <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="posX-label w-20 text-sm text-gray-600">X Position:</label>
+            <label class="w-20 text-sm text-gray-600">X Position:</label>
             <input type="range" id="posX" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="posY-label w-20 text-sm text-gray-600">Y Position:</label>
+            <label class="w-20 text-sm text-gray-600">Y Position:</label>
             <input type="range" id="posY" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="posZ-label w-20 text-sm text-gray-600">Z Position:</label>
+            <label class="w-20 text-sm text-gray-600">Z Position:</label>
             <input type="range" id="posZ" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="rotX-label w-20 text-sm text-gray-600">X Rotation:</label>
-            <input type="range" id="rotX" min="-180" max="180" step="1" value="90" class="w-full accent-blue-600">
+            <label class="w-20 text-sm text-gray-600">X Rotation:</label>
+            <input type="range" id="rotX" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="rotY-label w-20 text-sm text-gray-600">Y Rotation:</label>
+            <label class="w-20 text-sm text-gray-600">Y Rotation:</label>
             <input type="range" id="rotY" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="rotZ-label w-20 text-sm text-gray-600">Z Rotation:</label>
+            <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
             <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
           <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
@@ -86,7 +89,7 @@
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
       import {Ray} from './js/render/math/ray.js';
-      import {Material, Sampler, Texture} from './js/render/core/material.js';
+      import {TexturedPlaneNode} from './js/render/nodes/textured-plane.js'; // If using a separate file
 
       // XR globals
       let xrButton = null;
@@ -100,246 +103,23 @@
       let scene = new Scene();
       scene.enableStats(false);
 
-      // Create debug plane node with solid color
-      function createDebugPlaneNode(color = [1, 0, 0, 1]) {
-        const planeNode = new Node();
-        planeNode.name = 'DebugPlane';
-        planeNode.visible = true;
+      let arObject = new Node();
+      arObject.visible = false;
+      scene.addNode(arObject);
 
-        // Define plane geometry (0.5m x 0.5m, centered)
-        const vertices = new Float32Array([
-          -0.25, -0.25, 0.0,
-           0.25, -0.25, 0.0,
-           0.25,  0.25, 0.0,
-          -0.25,  0.25, 0.0,
-        ]);
-
-        const indices = new Uint16Array([
-          0, 1, 2,
-          0, 2, 3,
-        ]);
-
-        const vertexShader = `
-          precision highp float;
-          attribute vec3 POSITION;
-          uniform mat4 PROJECTION_MATRIX;
-          uniform mat4 VIEW_MATRIX;
-          uniform mat4 MODEL_MATRIX;
-          void main() {
-            gl_Position = PROJECTION_MATRIX * VIEW_MATRIX * MODEL_MATRIX * vec4(POSITION, 1.0);
-          }
-        `;
-
-        const fragmentShader = `
-          precision highp float;
-          void main() {
-            gl_FragColor = vec4(${color[0]}, ${color[1]}, ${color[2]}, ${color[3]});
-          }
-        `;
-
-        const material = new Material('DebugPlane', vertexShader, fragmentShader);
-        material.state = {
-          blend: false,
-          depthTest: true,
-          cullFace: false
-        };
-
-        const mesh = renderer.createSimpleMesh({}, {
-          positions: vertices,
-          indices: indices
-        }, material);
-        const primitive = renderer.createPrimitiveFromMesh(mesh);
-        planeNode.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
-
-        return planeNode;
-      }
-
-      // Create plane node for PNG wall art
-      function createImagePlaneNode(imageUrl) {
-        const planeNode = new Node();
-        planeNode.name = 'ImagePlane';
-        planeNode.visible = true;
-
-        // Create canvas for texture
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
-        const ctx = canvas.getContext('2d');
-
-        // Fallback texture
-        ctx.fillStyle = '#FF6B6B';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '48px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Loading...', canvas.width / 2, canvas.height / 2);
-
-        // Create WebGL texture
-        let texture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        // Load PNG image
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = function() {
-          const aspect = img.width / img.height;
-          let drawWidth, drawHeight;
-          if (aspect > 1) {
-            drawWidth = canvas.width;
-            drawHeight = canvas.width / aspect;
-          } else {
-            drawHeight = canvas.height;
-            drawWidth = canvas.height * aspect;
-          }
-          const x = (canvas.width - drawWidth) / 2;
-          const y = (canvas.height - drawHeight) / 2;
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, x, y, drawWidth, drawHeight);
-
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D, texture);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-          gl.generateMipmap(gl.TEXTURE_2D);
-        };
-        img.onerror = function() {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = '#FF0000';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = '#FFFFFF';
-          ctx.font = '32px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText('Error', canvas.width / 2, canvas.height / 2);
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D, texture);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-        };
-        img.src = imageUrl;
-
-        // Define plane geometry (0.5m x 0.5m, centered)
-        const vertices = new Float32Array([
-          -0.25, -0.25, 0.0,
-           0.25, -0.25, 0.0,
-           0.25,  0.25, 0.0,
-          -0.25,  0.25, 0.0,
-        ]);
-
-        const texCoords = new Float32Array([
-          0.0, 1.0,
-          1.0, 1.0,
-          1.0, 0.0,
-          0.0, 0.0,
-        ]);
-
-        const indices = new Uint16Array([
-          0, 1, 2,
-          0, 2, 3,
-        ]);
-
-        const vertexShader = `
-          precision highp float;
-          attribute vec3 POSITION;
-          attribute vec2 TEXCOORD_0;
-          uniform mat4 PROJECTION_MATRIX;
-          uniform mat4 VIEW_MATRIX;
-          uniform mat4 MODEL_MATRIX;
-          varying vec2 vTexCoord;
-          void main() {
-            vTexCoord = TEXCOORD_0;
-            gl_Position = PROJECTION_MATRIX * VIEW_MATRIX * MODEL_MATRIX * vec4(POSITION, 1.0);
-          }
-        `;
-
-        const fragmentShader = `
-          precision highp float;
-          varying vec2 vTexCoord;
-          uniform sampler2D uTexture;
-          void main() {
-            vec4 color = texture2D(uTexture, vTexCoord);
-            gl_FragColor = color;
-          }
-        `;
-
-        const sampler = new Sampler({
-          minFilter: gl.LINEAR,
-          magFilter: gl.LINEAR,
-          wrapS: gl.CLAMP_TO_EDGE,
-          wrapT: gl.CLAMP_TO_EDGE,
-        });
-        const textureObj = new Texture('planeTexture', texture, sampler);
-        const material = new Material('TexturedPlane', vertexShader, fragmentShader);
-        material.addSampler('uTexture', textureObj);
-
-        material.state = {
-          blend: true,
-          blendFuncSrc: gl.SRC_ALPHA,
-          blendFuncDst: gl.ONE_MINUS_SRC_ALPHA,
-          depthTest: true,
-          depthMask: false,
-          cullFace: false
-        };
-
-        const mesh = renderer.createSimpleMesh({}, {
-          positions: vertices,
-          texCoords: texCoords,
-          indices: indices,
-        }, material);
-        const primitive = renderer.createPrimitiveFromMesh(mesh);
-        planeNode.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
-
-        return planeNode;
-      }
-
-      // Fallback 2D rendering test
-      function test2DRendering() {
-        if (!gl) {
-          gl = createWebGLContext({ alpha: true });
-          renderer = new Renderer(gl);
-          scene.setRenderer(renderer);
-        }
-
-        const debugPlane = createDebugPlaneNode([1, 0, 0, 1]);
-        debugPlane.matrix = mat4.fromTranslation(mat4.create(), [0, 0, -1]);
-        scene.addNode(debugPlane);
-
-        const canvas = gl.canvas;
-        canvas.style.position = 'absolute';
-        canvas.style.top = '0';
-        canvas.style.left = '0';
-        document.body.appendChild(canvas);
-
-        function render2DFrame() {
-          gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-          gl.clearColor(0, 0, 0, 1);
-          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-          const projectionMatrix = mat4.create();
-          mat4.perspective(projectionMatrix, 60 * Math.PI / 180, gl.canvas.width / gl.canvas.height, 0.01, 100);
-          const viewMatrix = mat4.create();
-          mat4.lookAt(viewMatrix, [0, 0, 0], [0, 0, -1], [0, 1, 0]);
-
-          scene.startFrame();
-          scene.draw(projectionMatrix, viewMatrix);
-          scene.endFrame();
-
-          requestAnimationFrame(render2DFrame);
-        }
-
-        render2DFrame();
-      }
+      let wallArt = new TexturedPlaneNode('media/images/wallart.png');
+        vec3.set(wallArt.scale, 0.5, 0.5, 0.5); // Initial scale
+        wallArt.onLoad = () => console.log('wallart.png loaded successfully');
+        wallArt.onError = (error) => console.error('Error loading wallart.png:', error);
+        arObject.addNode(wallArt);
 
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
-      reticle.name = 'Reticle';
       reticle.visible = false;
       scene.addNode(reticle);
 
       scene.clear = false;
 
+      // Single poster management
       let currentPoster = null;
       let baseMatrix = mat4.create();
       let controls = {
@@ -349,9 +129,10 @@
         posZ: 0,
         rotX: 90,
         rotY: 0,
-        rotZ: 0,
+        rotZ: 0
       };
 
+      // Touch control variables
       let isDragging = false;
       let isPinching = false;
       let lastTouchX = 0;
@@ -359,15 +140,6 @@
       let initialPinchAngle = 0;
       let initialPinchDistance = 0;
       let lastPose = null;
-
-      // Debounce utility
-      function debounce(func, wait) {
-        let timeout;
-        return function (...args) {
-          clearTimeout(timeout);
-          timeout = setTimeout(() => func.apply(this, args), wait);
-        };
-      }
 
       function updatePosterTransform() {
         if (!currentPoster) return;
@@ -378,13 +150,16 @@
         mat4.getTranslation(position, matrix);
         mat4.getRotation(rotation, matrix);
 
+        // Apply position offsets
         let offset = vec3.fromValues(controls.posX, controls.posY, controls.posZ);
         vec3.add(position, position, offset);
 
+        // Apply user rotations
         let userRotation = quat.create();
         quat.fromEuler(userRotation, controls.rotX, controls.rotY, controls.rotZ);
         quat.multiply(rotation, rotation, userRotation);
 
+        // Apply scale
         let scaleMatrix = mat4.create();
         mat4.fromScaling(scaleMatrix, [controls.scale, controls.scale, controls.scale]);
         let transformMatrix = mat4.create();
@@ -393,6 +168,7 @@
 
         currentPoster.matrix = transformMatrix;
 
+        // Update sliders
         document.getElementById('scale').value = controls.scale;
         document.getElementById('posX').value = controls.posX;
         document.getElementById('posY').value = controls.posY;
@@ -402,17 +178,22 @@
         document.getElementById('rotZ').value = controls.rotZ;
       }
 
+      // Raycasting to check if touch hits the poster
       function rayIntersectsPoster(touchX, touchY, canvas, pose) {
         if (!currentPoster || !pose) return false;
 
+        // Convert touch to normalized device coordinates (-1 to 1)
         const rect = canvas.getBoundingClientRect();
         const ndcX = (2.0 * touchX - rect.width) / rect.width;
         const ndcY = (rect.height - 2.0 * touchY) / rect.height;
 
+        // Get projection and view matrices
         const projectionMatrix = mat4.create();
-        mat4.perspective(projectionMatrix, 60 * Math.PI / 180, rect.width / rect.height, 0.01, 1000.0);
+        const fov = 60 * Math.PI / 180; // Assume 60° FOV
+        mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
         const viewMatrix = pose.views[0].transform.inverse.matrix;
 
+        // Create ray in world space
         const rayOrigin = vec3.create();
         const rayEnd = vec3.fromValues(ndcX, ndcY, -1);
         const rayOriginView = vec3.fromValues(ndcX, ndcY, -1);
@@ -426,31 +207,22 @@
         vec3.subtract(rayDirection, rayEnd, rayOrigin);
         vec3.normalize(rayDirection, rayDirection);
 
+        // Get poster’s world position
         const posterMatrix = currentPoster.matrix;
         const posterPosition = vec3.create();
-        const posterNormal = vec3.fromValues(0, 0, 1);
-        const worldNormal = vec3.create();
         mat4.getTranslation(posterPosition, posterMatrix);
-        vec3.transformMat4(worldNormal, posterNormal, posterMatrix);
-        vec3.subtract(worldNormal, worldNormal, posterPosition);
-        vec3.normalize(worldNormal, worldNormal);
 
-        const denom = vec3.dot(worldNormal, rayDirection);
-        if (Math.abs(denom) > 0.0001) {
-          const toPlane = vec3.create();
-          vec3.subtract(toPlane, posterPosition, rayOrigin);
-          const t = vec3.dot(toPlane, worldNormal) / denom;
-          if (t >= 0) {
-            const intersection = vec3.create();
-            vec3.scaleAndAdd(intersection, rayOrigin, rayDirection, t);
-            const invMatrix = mat4.create();
-            mat4.invert(invMatrix, posterMatrix);
-            const localPos = vec3.create();
-            vec3.transformMat4(localPos, intersection, invMatrix);
-            return Math.abs(localPos[0]) <= 0.25 && Math.abs(localPos[1]) <= 0.25;
-          }
-        }
-        return false;
+        // Approximate poster as a sphere (radius based on scale)
+        const radius = controls.scale * 0.25; // Assume WallArt.glb is ~0.5m wide
+        const ray = new Ray(rayOrigin, rayDirection);
+        const toPoster = vec3.create();
+        vec3.subtract(toPoster, posterPosition, rayOrigin);
+        const t = vec3.dot(toPoster, rayDirection);
+        if (t < 0) return false;
+        const closestPoint = vec3.create();
+        vec3.scaleAndAdd(closestPoint, rayOrigin, rayDirection, t);
+        const distance = vec3.distance(closestPoint, posterPosition);
+        return distance < radius;
       }
 
       function initXR() {
@@ -464,17 +236,13 @@
         document.querySelector('header').appendChild(xrButton.domElement);
 
         if (navigator.xr) {
-          navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-            xrButton.enabled = supported;
-            if (!supported) {
-              test2DRendering();
-            }
-          });
-        } else {
-          test2DRendering();
+          navigator.xr.isSessionSupported('immersive-ar')
+            .then((supported) => {
+              xrButton.enabled = supported;
+            });
         }
 
-        // Control listeners
+        // Setup control listeners
         document.getElementById('scale').addEventListener('input', (e) => {
           controls.scale = parseFloat(e.target.value);
           updatePosterTransform();
@@ -509,11 +277,13 @@
             currentPoster = null;
             document.getElementById('controls').style.display = 'none';
             document.getElementById('guidance').style.display = 'block';
-            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 90, rotY: 0, rotZ: 0 };
+            // Reset controls
+            controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
             updatePosterTransform();
           }
         });
 
+        // Setup minimize/maximize toggle
         document.getElementById('toggleControls').addEventListener('click', () => {
           const controlsPanel = document.getElementById('controlsPanel');
           const toggleIcon = document.getElementById('toggleIcon');
@@ -526,7 +296,7 @@
           }
         });
 
-        // Touch controls
+        // Setup touch controls on canvas
         const canvas = document.querySelector('canvas');
         if (canvas) {
           canvas.addEventListener('touchstart', (e) => {
@@ -555,8 +325,8 @@
               const touchY = e.touches[0].clientY;
               const deltaX = touchX - lastTouchX;
               const deltaY = touchY - lastTouchY;
-              controls.rotY += deltaX * 0.5;
-              controls.rotX += deltaY * 0.5;
+              controls.rotY += deltaX * 0.5; // Horizontal drag -> Y rotation
+              controls.rotX += deltaY * 0.5; // Vertical drag -> X rotation
               lastTouchX = touchX;
               lastTouchY = touchY;
               updatePosterTransform();
@@ -565,8 +335,10 @@
               const dy = e.touches[1].clientY - e.touches[0].clientY;
               const currentDistance = Math.sqrt(dx * dx + dy * dy);
               const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+              // Adjust scale based on pinch distance
               const scaleChange = currentDistance / initialPinchDistance;
               controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
+              // Adjust Z rotation based on angle
               controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
               initialPinchDistance = currentDistance;
               initialPinchAngle = currentAngle;
@@ -574,7 +346,7 @@
             }
           });
 
-          canvas.addEventListener('touchend', () => {
+          canvas.addEventListener('touchend', (e) => {
             isDragging = false;
             isPinching = false;
           });
@@ -596,47 +368,62 @@
 
       function onSessionStarted(session) {
         session.addEventListener('end', onSessionEnded);
-        session.addEventListener('select', debouncedOnSelect);
+        session.addEventListener('select', onSelect);
 
         if (!gl) {
-          gl = createWebGLContext({
-            xrCompatible: true,
-            alpha: true
-          });
-          if (!gl) {
-            session.end();
-            return;
-          }
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-          gl.enable(gl.DEPTH_TEST);
-          gl.depthFunc(gl.LEQUAL);
-          renderer = new Renderer(gl);
-          scene.setRenderer(renderer);
-        }
+            try {
+              gl = createWebGLContext({
+                xrCompatible: true,
+                alpha: true
+              });
+              if (!gl) {
+                alert('Error: Failed to create WebGL context');
+                session.end();
+                return;
+              }
+              renderer = new Renderer(gl);
+              scene.setRenderer(renderer);
 
-        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl, { alpha: true }) });
+              // Initialize wallArt with WebGL context
+              wallArt.init(gl);
+            } catch (error) {
+              alert(`WebGL Error: ${error.message}`);
+              session.end();
+              return;
+            }
+          }
+
+        try {
+          session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+        } catch (error) {
+          alert(`XRWebGLLayer Error: ${error.message}`);
+          session.end();
+          return;
+        }
 
         session.requestReferenceSpace('viewer').then((refSpace) => {
           xrViewerSpace = refSpace;
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
             xrHitTestSource = hitTestSource;
+          }).catch((error) => {
+            alert(`HitTest Error: ${error.message}`);
           });
         });
 
         session.requestReferenceSpace('local').then((refSpace) => {
           xrRefSpace = refSpace;
           session.requestAnimationFrame(onXRFrame);
+        }).catch((error) => {
+          alert(`RefSpace Error: ${error.message}`);
         });
 
+        // Show guidance initially
         document.getElementById('guidance').style.display = 'block';
       }
 
       function onEndSession(session) {
-        if (xrHitTestSource) {
-          xrHitTestSource.cancel();
-          xrHitTestSource = null;
-        }
+        xrHitTestSource.cancel();
+        xrHitTestSource = null;
         session.end();
       }
 
@@ -645,43 +432,73 @@
       }
 
       function addARObjectAt(matrix) {
+        // Only place if no poster exists
         if (currentPoster) return;
 
+        let hitMatrix = mat4.clone(matrix);
+        let position = vec3.create();
+        let rotation = quat.create();
+        mat4.getTranslation(position, hitMatrix);
+        mat4.getRotation(rotation, hitMatrix);
+
+        let upVector = vec3.fromValues(0, 1, 0);
+        vec3.transformQuat(upVector, upVector, rotation);
+        vec3.normalize(upVector, upVector);
+
+        let surfaceNormal = vec3.create();
+        let surfaceType = '';
+        if (Math.abs(upVector[1]) > 0.7) {
+          surfaceNormal = vec3.clone(upVector);
+          surfaceType = 'Floor';
+        } else {
+          let viewerForward = vec3.fromValues(-90, 0, 0);
+          vec3.transformQuat(viewerForward, viewerForward, rotation);
+          surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
+          vec3.normalize(surfaceNormal, surfaceNormal);
+          vec3.negate(surfaceNormal, surfaceNormal);
+          surfaceType = 'Wall';
+        }
+
+        // Only place on walls
+        if (surfaceType !== 'Wall') return;
+
+        let modelZ = vec3.fromValues(0, 0, -1);
+        let alignRotation = quat.create();
+        quat.rotationTo(alignRotation, modelZ, surfaceNormal);
+
         let finalMatrix = mat4.create();
-        mat4.fromTranslation(finalMatrix, [0, 0, -1]); // Place 1m in front
+        let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01);
+        vec3.add(position, position, offset);
+        mat4.fromRotationTranslation(finalMatrix, rotation, position);
+        mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
-        const debugPlane = createDebugPlaneNode([1, 0, 0, 1]);
-        debugPlane.matrix = finalMatrix;
-        scene.addNode(debugPlane);
+           // Apply 90-degree y-rotation
+        let yRotationQuat = quat.create();
+        quat.fromEuler(yRotationQuat, 0, 90, 0); // 90 degrees around y-axis
+        let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
+        mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
 
-        setTimeout(() => {
-          if (scene.children.includes(debugPlane)) {
-            scene.removeNode(debugPlane);
-          }
+        let newObject = arObject.clone();
+        newObject.visible = true;
+        currentPoster = newObject;
+        baseMatrix = mat4.clone(finalMatrix);
 
-          const newPoster = new Node();
-          newPoster.name = 'Poster';
-          newPoster.visible = true;
-          const newWallArt = createImagePlaneNode('media/images/wallart.png');
-          newWallArt.visible = true;
-          newPoster.addNode(newWallArt);
-          newPoster.matrix = finalMatrix;
-          currentPoster = newPoster;
-          baseMatrix = mat4.clone(finalMatrix);
+        // Apply current controls (with rotY initialized to 90)
+        updatePosterTransform();
+        scene.addNode(newObject);
 
-          updatePosterTransform();
-          scene.addNode(newPoster);
-
-          document.getElementById('controls').style.display = 'block';
-          document.getElementById('guidance').style.display = 'none';
-        }, 3000);
+        // Show controls, hide guidance
+        document.getElementById('controls').style.display = 'block';
+        document.getElementById('guidance').style.display = 'none';
       }
 
-      const debouncedOnSelect = debounce((event) => {
+      let rayOrigin = vec3.create();
+      let rayDirection = vec3.create();
+      function onSelect(event) {
         if (reticle.visible) {
           addARObjectAt(reticle.matrix);
         }
-      }, 500);
+      }
 
       function onXRFrame(t, frame) {
         let session = frame.session;
@@ -714,11 +531,6 @@
             }
           }
         }
-
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        gl.enable(gl.DEPTH_TEST);
-        gl.depthFunc(gl.LEQUAL);
 
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
