@@ -29,7 +29,7 @@
         left: 0;
         right: 0;
         height: 150px;
-        background: 0;
+        background: rgba(0, 0, 0, 0.8);
         color: white;
         font-family: monospace;
         font-size: 12px;
@@ -77,6 +77,7 @@
         border: none;
         cursor: pointer;
         font-size: 12px;
+        z-index: 1001;
       }
       #copyConsoleButton:hover {
         background: #6b7280;
@@ -496,7 +497,7 @@
                 lastTouchX = touchX;
                 lastTouchY = touchY;
                 console.log('Dragging started at:', { touchX, touchY });
-              } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, e)) {
+              } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
                 isPinching = true;
                 const dx = e.touches[1].clientX - e.touches[0].clientX;
                 const dy = e.touches[1].clientY - e.touches[0].clientY;
@@ -508,7 +509,7 @@
 
             canvas.addEventListener('touchmove', (e) => {
               if (!currentPoster) {
-                console.log('Touchmove skipped');
+                console.log('Touchmove skipped: no poster');
                 return;
               }
               e.preventDefault();
@@ -562,7 +563,7 @@
           optionalFeatures: ['hit-test'],
           domOverlay: { root: document.body }
         }).then((session) => {
-          console.log('AR Sak to session started successfully');
+          console.log('AR session started successfully');
           xrButton.setSession(session);
           document.getElementById('testPlaceButton').style.display = 'none';
           onSessionStarted(session);
@@ -593,7 +594,7 @@
             }
             renderer = new Renderer(gl);
             scene.setRenderer(renderer);
-            console.log('WebGL context renderer initialized');
+            console.log('WebGL context and renderer initialized');
           } catch (error) {
             console.error('WebGL error:', error);
             alert(`WebGL Error: ${error.message}`);
@@ -643,7 +644,7 @@
           console.log('Hit test source canceled');
         }
         session.end();
-        console.log('Session ended');
+        console.log('AR session ended');
       }
 
       function onSessionEnded(event) {
@@ -685,7 +686,6 @@
 
         console.log('Surface detected:', { surfaceType, upVector });
 
-        // Simplify placement for testing
         let modelZ = vec3.fromValues(0, 0, -1);
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
@@ -750,7 +750,7 @@
             vec3.transformQuat(upVector, upVector, rotation);
             vec3.normalize(upVector, upVector);
 
-            let surfaceType = Math.abs(hitMatrix) > 0.7 ? 'Floor' : 'Wall';
+            let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
             console.log('Surface detected:', { surfaceType, position });
 
             if (surfaceType === 'Wall') {
