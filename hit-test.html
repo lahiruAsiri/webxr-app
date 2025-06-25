@@ -82,6 +82,14 @@
       #copyConsoleButton:hover {
         background: #6b7280;
       }
+      canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+      }
     </style>
     <title>Hit Test AR</title>
   </head>
@@ -108,7 +116,7 @@
         <div class="space-y-4">
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">Size:</label>
-            <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-blue-600">
+            <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="1.0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
             <label class="w-20 text-sm text-gray-600">X Position:</label>
@@ -140,6 +148,7 @@
         </div>
       </div>
     </div>
+    <canvas></canvas>
     <div id="debugConsole">
       <button id="copyConsoleButton">Copy Console</button>
     </div>
@@ -210,14 +219,24 @@
             1, 1,
             1, 0,
             0, 0
+          ]),
+          normals: new Float32Array([
+            0, 0, 1,
+            0, 0, 1,
+            0, 0, 1,
+            0, 0, 1
           ])
         };
 
         const material = {
-          baseColorTexture: { uri: pngUrl },
+          baseColorTexture: { 
+            uri: pngUrl,
+            onError: (e) => console.error('Texture load error:', e)
+          },
           metallicFactor: 0,
           roughnessFactor: 1,
-          alphaMode: 'OPAQUE'
+          alphaMode: 'OPAQUE',
+          doubleSided: true
         };
 
         const meshNode = new MeshNode({ 
@@ -229,7 +248,7 @@
         planeNode.addNode(meshNode);
         console.log('Plane node created:', { geometry: planeGeometry, material });
 
-        vec3.set(planeNode.scale, 0.5, 0.5, 0.5);
+        vec3.set(planeNode.scale, 1.0, 1.0, 1.0);
         return planeNode;
       }
 
@@ -249,11 +268,11 @@
       let currentPoster = null;
       let baseMatrix = mat4.create();
       let controls = {
-        scale: 0.5,
+        scale: 1.0,
         posX: 0,
         posY: 0,
         posZ: 0,
-        rotX: 90,
+        rotX: 0,
         rotY: 0,
         rotZ: 0
       };
@@ -293,7 +312,13 @@
         mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
 
         currentPoster.matrix = transformMatrix;
-        console.log('Poster transform updated:', { scale: controls.scale, position, rotation: controls });
+        console.log('Poster transform updated:', { 
+          scale: controls.scale, 
+          position, 
+          rotation: controls,
+          matrix: transformMatrix,
+          visible: currentPoster.visible
+        });
 
         document.getElementById('scale').value = controls.scale;
         document.getElementById('posX').value = controls.posX;
@@ -336,7 +361,7 @@
         const posterPosition = vec3.create();
         mat4.getTranslation(posterPosition, posterMatrix);
 
-        const radius = controls.scale * 0.25;
+        const radius = controls.scale * 0.5;
         const ray = new Ray(rayOrigin, rayDirection);
         const toPoster = vec3.create();
         vec3.subtract(toPoster, posterPosition, rayOrigin);
@@ -455,7 +480,7 @@
               currentPoster = null;
               document.getElementById('controls').style.display = 'none';
               document.getElementById('guidance').style.display = 'block';
-              controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
+              controls = { scale: 1.0, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
               updatePosterTransform();
             }
           });
@@ -706,7 +731,13 @@
         currentPoster = newObject;
         baseMatrix = mat4.clone(finalMatrix);
 
-        console.log('Poster placed:', { position, rotation, matrix: finalMatrix, visible: newObject.visible });
+        console.log('Poster placed:', { 
+          position, 
+          rotation, 
+          matrix: finalMatrix, 
+          visible: newObject.visible,
+          surfaceType
+        });
 
         updatePosterTransform();
         scene.addNode(newObject);
@@ -762,7 +793,12 @@
           }
         }
 
-        console.log('Rendering frame:', { hasPoster: !!currentPoster, reticleVisible: reticle.visible, pose: !!pose });
+        console.log('Rendering frame:', { 
+          hasPoster: !!currentPoster, 
+          reticleVisible: reticle.visible, 
+          pose: !!pose,
+          posterVisible: currentPoster ? currentPoster.visible : false
+        });
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
         scene.drawXRFrame(frame, pose);
