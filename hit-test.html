@@ -111,6 +111,15 @@
         debugDiv.scrollTop = debugDiv.scrollHeight;
       }
 
+      function checkGLErrors(gl) {
+        const err = gl.getError();
+        if (err !== gl.NO_ERROR) {
+          console.error("WebGL Error:", err);
+          return false;
+        }
+        return true;
+      }
+
       // XR globals
       let xrButton = null;
       let xrRefSpace = null;
@@ -127,7 +136,7 @@
       function createImagePlaneNode(imageUrl) {
         const planeNode = new Node();
         planeNode.name = 'ImagePlane';
-        planeNode.visible = true; // Ensure visibility
+        planeNode.visible = true;
         logDebug('Creating image plane node');
 
         // Create canvas for texture
@@ -148,17 +157,18 @@
         let texture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, texture);
-        console.log('Texture bound:', gl.getParameter(gl.TEXTURE_BINDING_2D));
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        checkGLErrors(gl);
         logDebug('WebGL texture created');
 
         // Load PNG image
         const img = new Image();
-        img.onload = function () {
+        img.crossOrigin = "anonymous"; // Enable CORS if needed
+        img.onload = function() {
           logDebug('Image loaded successfully');
           const aspect = img.width / img.height;
           let drawWidth, drawHeight;
@@ -173,12 +183,15 @@
           const y = (canvas.height - drawHeight) / 2;
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, x, y, drawWidth, drawHeight);
+          
           gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+          gl.generateMipmap(gl.TEXTURE_2D);
+          checkGLErrors(gl);
           logDebug('Texture updated with loaded image');
         };
-        img.onerror = function () {
+        img.onerror = function() {
           logDebug('Image failed to load');
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.fillStyle = '#FF0000';
@@ -190,6 +203,7 @@
           gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+          checkGLErrors(gl);
         };
         img.src = imageUrl;
 
@@ -223,15 +237,7 @@
           varying vec2 vTexCoord;
           void main() {
             vTexCoord = TEXCOORD_0;
-            vec4 pos = MODEL_MATRIX * vec4(POSITION, 1.0);
-            pos = VIEW_MATRIX * pos;
-            pos = PROJECTION_MATRIX * pos;
-            // Debug output
-            if (pos.z > 0.0) {
-              gl_Position = vec4(0.0, 0.0, -10.0, 1.0); // Force off-screen if behind camera
-            } else {
-              gl_Position = pos;
-            }
+            gl_Position = PROJECTION_MATRIX * VIEW_MATRIX * MODEL_MATRIX * vec4(POSITION, 1.0);
           }
         `;
 
@@ -241,12 +247,7 @@
           uniform sampler2D uTexture;
           void main() {
             vec4 color = texture2D(uTexture, vTexCoord);
-            // Debug: show red if texture is missing
-            if (color.a == 0.0) {
-              gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
-            } else {
-              gl_FragColor = color;
-            }
+            gl_FragColor = color;
           }
         `;
 
@@ -261,13 +262,15 @@
         const material = new Material('TexturedPlane', vertexShader, fragmentShader);
         material.addSampler('uTexture', textureObj);
 
-        // Enable blending for PNG transparency
-        material.state.blend = true;
-        material.state.blendFuncSrc = gl.SRC_ALPHA;
-        material.state.blendFuncDst = gl.ONE_MINUS_SRC_ALPHA;
-        material.state.depthTest = true;
-        material.state.cullFace = false;
-        logDebug(`Material states: blend=${material.state.blend}, depthTest=${material.state.depthTest}, cullFace=${material.state.cullFace}`);
+        // Set material state
+        material.state = {
+          blend: true,
+          blendFuncSrc: gl.SRC_ALPHA,
+          blendFuncDst: gl.ONE_MINUS_SRC_ALPHA,
+          depthTest: true,
+          depthMask: false,
+          cullFace: false
+        };
 
         // Create mesh and render primitive
         const mesh = renderer.createSimpleMesh({}, {
@@ -663,7 +666,7 @@
         const newPoster = new Node();
         newPoster.name = 'Poster';
         newPoster.visible = true;
-        const newWallArt = createImagePlaneNode('/media/images/wallart.png');
+        const newWallArt = createImagePlaneNode('media/images/wallart.png');
         newWallArt.visible = true;
         newPoster.addNode(newWallArt);
         currentPoster = newPoster;
@@ -719,12 +722,10 @@
         }
 
         // Reset WebGL states before rendering
-        if (currentPoster) {
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-          gl.enable(gl.DEPTH_TEST);
-          gl.depthFunc(gl.LEQUAL);
-        }
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
 
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
