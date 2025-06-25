@@ -36,6 +36,8 @@
         max-width: 100%;
         overflow: auto;
         max-height: 150px;
+        user-select: text; /* Ensure text is selectable */
+        -webkit-user-select: text; /* For Safari */
       }
     </style>
     <title>Hit Test</title>
@@ -241,23 +243,6 @@
         checkTexture(gl, texture);
         logDebug('WebGL texture created');
 
-        // Debug: Draw texture to a visible canvas
-        const debugCanvas = document.createElement('canvas');
-        debugCanvas.style.position = 'fixed';
-        debugCanvas.style.bottom = '0';
-        debugCanvas.style.right = '0';
-        debugCanvas.style.zIndex = '10000';
-        debugCanvas.width = 200;
-        debugCanvas.height = 200;
-        document.body.appendChild(debugCanvas);
-        const debugCtx = debugCanvas.getContext('2d');
-        debugCtx.fillStyle = '#FF6B6B';
-        debugCtx.fillRect(0, 0, 200, 200);
-        debugCtx.fillStyle = '#FFFFFF';
-        debugCtx.font = '24px Arial';
-        debugCtx.textAlign = 'center';
-        debugCtx.fillText('Loading...', 100, 100);
-
         // Load PNG image
         const img = new Image();
         img.crossOrigin = "anonymous";
@@ -284,9 +269,6 @@
           checkGLErrors(gl);
           checkTexture(gl, texture);
           logDebug('Texture updated with loaded image');
-
-          debugCtx.drawImage(img, 0, 0, 200, 200);
-          logDebug('Debug canvas updated with loaded image');
         };
         img.onerror = function() {
           logDebug('Image failed to load');
@@ -301,12 +283,7 @@
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
           checkGLErrors(gl);
-          debugCtx.fillStyle = '#FF0000';
-          debugCtx.fillRect(0, 0, 200, 200);
-          debugCtx.fillStyle = '#FFFFFF';
-          debugCtx.font = '24px Arial';
-          debugCtx.fillText('Error', 100, 100);
-          logDebug('Debug canvas updated with error state');
+          logDebug('Texture updated with error state');
         };
         img.src = imageUrl;
 
@@ -899,7 +876,7 @@
           }
         }
 
-        // Reset WebGL states before rendering
+        // Reset WebGL states
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.enable(gl.DEPTH_TEST);
@@ -907,7 +884,7 @@
         checkGLErrors(gl);
 
         // Debug rendering state
-        logDebug(`Rendering frame with poster: ${currentPoster ? 'Yes' : 'No'}`);
+        logDebug(`Rendering frame with poster: ${currentPoster ? 'yes' : 'no'}`);
         if (currentPoster) {
           logDebug(`Poster visibility: ${currentPoster.visible}`);
           logDebug(`Poster matrix: ${currentPoster.matrix}`);
