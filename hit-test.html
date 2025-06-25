@@ -23,22 +23,6 @@
         font-family: Arial, sans-serif;
         display: none;
       }
-      #debug {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        background: rgba(0, 0, 0, 0.7);
-        color: #fff;
-        padding: 10px;
-        z-index: 1000;
-        font-family: monospace;
-        font-size: 12px;
-        max-width: 100%;
-        overflow: auto;
-        max-height: 150px;
-        user-select: text; /* Ensure text is selectable */
-        -webkit-user-select: text; /* For Safari */
-      }
     </style>
     <title>Hit Test</title>
   </head>
@@ -53,8 +37,7 @@
       </details>
     </header>
     <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
-    <div id="debug"></div>
-    <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
+    <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="display: none;">
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
       </button>
@@ -62,31 +45,31 @@
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
         <div class="space-y-4">
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Size:</label>
+            <label class="scale-label w-20 text-sm text-gray-600">Size:</label>
             <input type="range" id="scale" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">X Position:</label>
+            <label class="posX-label w-20 text-sm text-gray-600">X Position:</label>
             <input type="range" id="posX" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Y Position:</label>
+            <label class="posY-label w-20 text-sm text-gray-600">Y Position:</label>
             <input type="range" id="posY" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Z Position:</label>
+            <label class="posZ-label w-20 text-sm text-gray-600">Z Position:</label>
             <input type="range" id="posZ" min="-0.5" max="0.5" step="0.01" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">X Rotation:</label>
+            <label class="rotX-label w-20 text-sm text-gray-600">X Rotation:</label>
             <input type="range" id="rotX" min="-180" max="180" step="1" value="90" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Y Rotation:</label>
+            <label class="rotY-label w-20 text-sm text-gray-600">Y Rotation:</label>
             <input type="range" id="rotY" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
           <div class="flex items-center space-x-4">
-            <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
+            <label class="rotZ-label w-20 text-sm text-gray-600">Z Rotation:</label>
             <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
           <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
@@ -105,34 +88,6 @@
       import {Ray} from './js/render/math/ray.js';
       import {Material, Sampler, Texture} from './js/render/core/material.js';
 
-      // Debug logging
-      function logDebug(message) {
-        console.log('[DEBUG]', message);
-        const debugDiv = document.getElementById('debug');
-        debugDiv.textContent += message + '\n';
-        debugDiv.scrollTop = debugDiv.scrollHeight;
-      }
-
-      function checkGLErrors(gl) {
-        const err = gl.getError();
-        if (err !== gl.NO_ERROR) {
-          console.error("WebGL Error:", err);
-          logDebug(`WebGL Error: ${err}`);
-          return false;
-        }
-        return true;
-      }
-
-      // Check WebGL texture state
-      function checkTexture(gl, texture) {
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        const level = 0;
-        const width = gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_WIDTH);
-        const height = gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_HEIGHT);
-        logDebug(`Texture dimensions: ${width}x${height}`);
-        return { width, height };
-      }
-
       // XR globals
       let xrButton = null;
       let xrRefSpace = null;
@@ -150,22 +105,19 @@
         const planeNode = new Node();
         planeNode.name = 'DebugPlane';
         planeNode.visible = true;
-        logDebug('Creating debug plane node');
 
         // Define plane geometry (0.5m x 0.5m, centered)
         const vertices = new Float32Array([
-          -0.25, -0.25, 0.0, // bottom-left
-           0.25, -0.25, 0.0, // bottom-right
-           0.25,  0.25, 0.0, // top-right
-          -0.25,  0.25, 0.0, // top-left
+          -0.25, -0.25, 0.0,
+           0.25, -0.25, 0.0,
+           0.25,  0.25, 0.0,
+          -0.25,  0.25, 0.0,
         ]);
 
         const indices = new Uint16Array([
           0, 1, 2,
           0, 2, 3,
         ]);
-
-        logDebug(`Vertices: ${vertices.length / 3}, Indices: ${indices.length}`);
 
         const vertexShader = `
           precision highp float;
@@ -192,19 +144,12 @@
           cullFace: false
         };
 
-        try {
-          const mesh = renderer.createSimpleMesh({}, {
-            positions: vertices,
-            indices: indices
-          }, material);
-          logDebug('Debug plane mesh created');
-
-          const primitive = renderer.createPrimitiveFromMesh(mesh);
-          planeNode.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
-          logDebug(`Debug plane node created with ${planeNode.renderPrimitives.length} primitives`);
-        } catch (error) {
-          logDebug(`Error creating debug plane mesh: ${error.message}`);
-        }
+        const mesh = renderer.createSimpleMesh({}, {
+          positions: vertices,
+          indices: indices
+        }, material);
+        const primitive = renderer.createPrimitiveFromMesh(mesh);
+        planeNode.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
 
         return planeNode;
       }
@@ -214,7 +159,6 @@
         const planeNode = new Node();
         planeNode.name = 'ImagePlane';
         planeNode.visible = true;
-        logDebug('Creating image plane node');
 
         // Create canvas for texture
         const canvas = document.createElement('canvas');
@@ -239,15 +183,11 @@
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        checkGLErrors(gl);
-        checkTexture(gl, texture);
-        logDebug('WebGL texture created');
 
         // Load PNG image
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.onload = function() {
-          logDebug('Image loaded successfully');
           const aspect = img.width / img.height;
           let drawWidth, drawHeight;
           if (aspect > 1) {
@@ -266,12 +206,8 @@
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
           gl.generateMipmap(gl.TEXTURE_2D);
-          checkGLErrors(gl);
-          checkTexture(gl, texture);
-          logDebug('Texture updated with loaded image');
         };
         img.onerror = function() {
-          logDebug('Image failed to load');
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.fillStyle = '#FF0000';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -282,8 +218,6 @@
           gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-          checkGLErrors(gl);
-          logDebug('Texture updated with error state');
         };
         img.src = imageUrl;
 
@@ -357,18 +291,8 @@
         }, material);
         const primitive = renderer.createPrimitiveFromMesh(mesh);
         planeNode.addRenderPrimitive(renderer.createRenderPrimitive(primitive, material));
-        logDebug(`Plane node created with ${planeNode.renderPrimitives.length} primitives`);
 
         return planeNode;
-      }
-
-      // Test image loading separately
-      function testImageLoading() {
-        const testImg = new Image();
-        testImg.crossOrigin = "anonymous";
-        testImg.onload = () => logDebug('Test image loaded successfully');
-        testImg.onerror = () => logDebug('Test image failed to load');
-        testImg.src = 'media/images/wallart.png';
       }
 
       // Fallback 2D rendering test
@@ -395,7 +319,7 @@
           gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
           const projectionMatrix = mat4.create();
-          mat4.perspective(projectionMatrix, 60 * Math.PI / 180, gl.canvas.width / gl.canvas.height, 0.1, 100);
+          mat4.perspective(projectionMatrix, 60 * Math.PI / 180, gl.canvas.width / gl.canvas.height, 0.01, 100);
           const viewMatrix = mat4.create();
           mat4.lookAt(viewMatrix, [0, 0, 0], [0, 0, -1], [0, 1, 0]);
 
@@ -407,10 +331,10 @@
         }
 
         render2DFrame();
-        logDebug('Started 2D rendering test');
       }
 
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
+      reticle.name = 'Reticle';
       reticle.visible = false;
       scene.addNode(reticle);
 
@@ -436,6 +360,15 @@
       let initialPinchDistance = 0;
       let lastPose = null;
 
+      // Debounce utility
+      function debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+          clearTimeout(timeout);
+          timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+      }
+
       function updatePosterTransform() {
         if (!currentPoster) return;
 
@@ -460,10 +393,6 @@
 
         currentPoster.matrix = transformMatrix;
 
-        let worldPos = vec3.create();
-        mat4.getTranslation(worldPos, transformMatrix);
-        logDebug(`Poster transform updated: pos=[${worldPos[0].toFixed(3)}, ${worldPos[1].toFixed(3)}, ${worldPos[2].toFixed(3)}], scale=${controls.scale}`);
-
         document.getElementById('scale').value = controls.scale;
         document.getElementById('posX').value = controls.posX;
         document.getElementById('posY').value = controls.posY;
@@ -481,8 +410,7 @@
         const ndcY = (rect.height - 2.0 * touchY) / rect.height;
 
         const projectionMatrix = mat4.create();
-        const fov = 60 * Math.PI / 180;
-        mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
+        mat4.perspective(projectionMatrix, 60 * Math.PI / 180, rect.width / rect.height, 0.01, 1000.0);
         const viewMatrix = pose.views[0].transform.inverse.matrix;
 
         const rayOrigin = vec3.create();
@@ -519,11 +447,7 @@
             mat4.invert(invMatrix, posterMatrix);
             const localPos = vec3.create();
             vec3.transformMat4(localPos, intersection, invMatrix);
-            const hit = Math.abs(localPos[0]) <= 0.25 && Math.abs(localPos[1]) <= 0.25;
-            if (hit) {
-              logDebug(`Raycast hit: localPos=[${localPos[0].toFixed(3)}, ${localPos[1].toFixed(3)}]`);
-            }
-            return hit;
+            return Math.abs(localPos[0]) <= 0.25 && Math.abs(localPos[1]) <= 0.25;
           }
         }
         return false;
@@ -543,12 +467,10 @@
           navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
             xrButton.enabled = supported;
             if (!supported) {
-              logDebug('AR not supported, falling back to 2D rendering');
               test2DRendering();
             }
           });
         } else {
-          logDebug('WebXR not available, falling back to 2D rendering');
           test2DRendering();
         }
 
@@ -657,8 +579,6 @@
             isPinching = false;
           });
         }
-
-        testImageLoading();
       }
 
       function onRequestSession() {
@@ -670,64 +590,43 @@
           xrButton.setSession(session);
           onSessionStarted(session);
         }).catch((error) => {
-          logDebug(`AR Session Error: ${error.message}`);
           alert(`AR Session Error: ${error.message}`);
         });
       }
 
       function onSessionStarted(session) {
         session.addEventListener('end', onSessionEnded);
-        session.addEventListener('select', onSelect);
+        session.addEventListener('select', debouncedOnSelect);
 
         if (!gl) {
-          try {
-            gl = createWebGLContext({
-              xrCompatible: true,
-              alpha: true
-            });
-            if (!gl) {
-              logDebug('Failed to create WebGL context');
-              session.end();
-              return;
-            }
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-            gl.enable(gl.DEPTH_TEST);
-            gl.depthFunc(gl.LEQUAL);
-            renderer = new Renderer(gl);
-            scene.setRenderer(renderer);
-            logDebug('WebGL context and renderer created');
-          } catch (error) {
-            logDebug(`WebGL Error: ${error.message}`);
+          gl = createWebGLContext({
+            xrCompatible: true,
+            alpha: true
+          });
+          if (!gl) {
             session.end();
             return;
           }
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+          gl.enable(gl.DEPTH_TEST);
+          gl.depthFunc(gl.LEQUAL);
+          renderer = new Renderer(gl);
+          scene.setRenderer(renderer);
         }
 
-        try {
-          session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl, { alpha: true }) });
-        } catch (error) {
-          logDebug(`XRWebGLLayer Error: ${error.message}`);
-          session.end();
-          return;
-        }
+        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl, { alpha: true }) });
 
         session.requestReferenceSpace('viewer').then((refSpace) => {
           xrViewerSpace = refSpace;
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
             xrHitTestSource = hitTestSource;
-            logDebug('Hit test source created');
-          }).catch((error) => {
-            logDebug(`HitTest Error: ${error.message}`);
           });
         });
 
         session.requestReferenceSpace('local').then((refSpace) => {
           xrRefSpace = refSpace;
           session.requestAnimationFrame(onXRFrame);
-          logDebug('XR session started successfully');
-        }).catch((error) => {
-          logDebug(`RefSpace Error: ${error.message}`);
         });
 
         document.getElementById('guidance').style.display = 'block';
@@ -743,76 +642,21 @@
 
       function onSessionEnded(event) {
         xrButton.setSession(null);
-        logDebug('XR session ended');
       }
 
       function addARObjectAt(matrix) {
         if (currentPoster) return;
 
-        logDebug('Attempting to place poster');
-        let hitMatrix = mat4.clone(matrix);
-        let position = vec3.create();
-        let rotation = quat.create();
-        mat4.getTranslation(position, hitMatrix);
-        mat4.getRotation(rotation, hitMatrix);
-
-        logDebug(`Hit matrix position: [${position[0].toFixed(3)}, ${position[1].toFixed(3)}, ${position[2].toFixed(3)}]`);
-
-        let upVector = vec3.fromValues(0, 1, 0);
-        vec3.transformQuat(upVector, upVector, rotation);
-        vec3.normalize(upVector, upVector);
-
-        let surfaceNormal = vec3.create();
-        let surfaceType = '';
-        if (Math.abs(upVector[1]) > 0.7) {
-          surfaceNormal = vec3.clone(upVector);
-          surfaceType = 'Floor';
-        } else {
-          let viewerForward = vec3.fromValues(0, 0, -1);
-          vec3.transformQuat(viewerForward, viewerForward, rotation);
-          surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
-          vec3.normalize(surfaceNormal, surfaceNormal);
-          vec3.negate(surfaceNormal, surfaceNormal);
-          surfaceType = 'Wall';
-        }
-
-        if (surfaceType !== 'Wall') {
-          logDebug('Not placing on wall surface');
-          return;
-        }
-
-        let modelZ = vec3.fromValues(0, 0, -1);
-        let alignRotation = quat.create();
-        quat.rotationTo(alignRotation, modelZ, surfaceNormal);
-
         let finalMatrix = mat4.create();
-        let offset = vec3.scale(vec3.create(), surfaceNormal, 0.01);
-        vec3.add(position, position, offset);
-        mat4.fromRotationTranslation(finalMatrix, rotation, position);
-        mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
+        mat4.fromTranslation(finalMatrix, [0, 0, -1]); // Place 1m in front
 
-        logDebug(`Final matrix position: [${position[0].toFixed(3)}, ${position[1].toFixed(3)}, ${position[2].toFixed(3)}]`);
-        logDebug(`Final matrix: ${finalMatrix}`);
-
-        // Fallback: Test with a fixed position (1m in front of camera)
-        let fallbackMatrix = mat4.create();
-        mat4.fromTranslation(fallbackMatrix, [0, 0, -1]);
-        logDebug('Testing with fallback matrix at [0, 0, -1]');
-
-        // First try with debug plane (red)
         const debugPlane = createDebugPlaneNode([1, 0, 0, 1]);
-        debugPlane.matrix = finalMatrix; // Try hit matrix first
-        // debugPlane.matrix = fallbackMatrix; // Uncomment to test fallback position
+        debugPlane.matrix = finalMatrix;
         scene.addNode(debugPlane);
-        logDebug(`Debug plane added to scene. Scene nodes: ${scene.children.length}`);
 
-        // After 3 seconds, replace with the actual image
         setTimeout(() => {
           if (scene.children.includes(debugPlane)) {
             scene.removeNode(debugPlane);
-            logDebug('Debug plane removed');
-          } else {
-            logDebug('Debug plane not found in scene for removal');
           }
 
           const newPoster = new Node();
@@ -821,26 +665,23 @@
           const newWallArt = createImagePlaneNode('media/images/wallart.png');
           newWallArt.visible = true;
           newPoster.addNode(newWallArt);
-          newPoster.matrix = finalMatrix; // Use same matrix
-          // newPoster.matrix = fallbackMatrix; // Uncomment to test fallback position
+          newPoster.matrix = finalMatrix;
           currentPoster = newPoster;
           baseMatrix = mat4.clone(finalMatrix);
 
           updatePosterTransform();
           scene.addNode(newPoster);
 
-          logDebug(`Poster node added with ${newPoster.children.length} children, ${newWallArt.renderPrimitives.length} primitives`);
-          logDebug(`Scene nodes after poster added: ${scene.children.length}`);
           document.getElementById('controls').style.display = 'block';
           document.getElementById('guidance').style.display = 'none';
         }, 3000);
       }
 
-      function onSelect(event) {
+      const debouncedOnSelect = debounce((event) => {
         if (reticle.visible) {
           addARObjectAt(reticle.matrix);
         }
-      }
+      }, 500);
 
       function onXRFrame(t, frame) {
         let session = frame.session;
@@ -852,7 +693,6 @@
 
         if (xrHitTestSource && pose && !currentPoster) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
-          logDebug(`Hit test results: ${hitTestResults.length}`);
           if (hitTestResults.length > 0) {
             let hitPose = hitTestResults[0].getPose(xrRefSpace);
             let hitMatrix = hitPose.transform.matrix;
@@ -871,43 +711,19 @@
               reticle.visible = true;
               reticle.matrix = hitMatrix;
               document.getElementById('guidance').style.display = 'none';
-              logDebug('Reticle visible on wall');
             }
           }
         }
 
-        // Reset WebGL states
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(gl.LEQUAL);
-        checkGLErrors(gl);
-
-        // Debug rendering state
-        logDebug(`Rendering frame with poster: ${currentPoster ? 'yes' : 'no'}`);
-        if (currentPoster) {
-          logDebug(`Poster visibility: ${currentPoster.visible}`);
-          logDebug(`Poster matrix: ${currentPoster.matrix}`);
-        }
-        logDebug(`Scene nodes: ${scene.children.length}`);
-        scene.children.forEach((node, i) => {
-          logDebug(`Node ${i}: ${node.name}, Visible: ${node.visible}`);
-        });
-
-        // Log view/projection matrices if pose exists
-        if (pose && pose.views.length > 0) {
-          const viewMatrix = pose.views[0].transform.inverse.matrix;
-          const projectionMatrix = pose.views[0].projectionMatrix;
-          logDebug(`View matrix: ${viewMatrix}`);
-          logDebug(`Projection matrix: ${projectionMatrix}`);
-        }
 
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
         scene.drawXRFrame(frame, pose);
         scene.endFrame();
-
-        checkGLErrors(gl);
       }
 
       initXR();
