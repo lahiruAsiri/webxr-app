@@ -7,7 +7,6 @@
     <meta name='apple-mobile-web-app-capable' content='yes'>
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
-    <!-- Add Tailwind CSS via CDN for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body { margin: 0; }
@@ -46,8 +45,8 @@
         margin-top: 10px;
       }
       #noXRMessage {
-        position: none;
-        top: absolute;
+        position: fixed;
+        top: 10px;
         left: 50%;
         transform: translateX(-50%);
         background: rgba(255, 0, 0, 0.7);
@@ -55,7 +54,17 @@
         padding: 10px;
         border-radius: 5px;
         display: none;
-        z-index: 10;
+        z-index: 1000;
+      }
+      #testPlaceButton {
+        display: none;
+        margin: 10px 0;
+        padding: 10px 20px;
+        background: #10b981;
+        color: white;
+        border-radius: 5px;
+        border: none;
+        cursor: pointer;
       }
     </style>
     <title>Hit Test AR</title>
@@ -65,20 +74,19 @@
       <details open>
         <summary>Hit Test AR</summary>
         <p>
-          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Y axis) to adjust. Click "Remove Poster" to place a new one.
+          Point at a wall to see the blue reticle, then tap to place a poster. Use sliders or touch the poster (drag for X/Y rotation, pinch to adjust size or rotate around Z axis) to adjust. Click "Remove Poster" to place a new one.
           <a class="back" href="./">Back</a>
         </p>
         <div id="xrButtonContainer"></div>
         <div id="noXRMessage">AR not supported on this browser or device. Try Chrome on an ARCore-supported Android device.</div>
+        <button id="testPlaceButton">Place Test Poster</button>
       </details>
     </header>
     <div id="guidance">Point at a wall to see the blue reticle and place the poster.</div>
     <div class="fixed bottom-4 left-4 z-[1000] font-sans transition-all duration-300" id="controls" style="display: none;">
-      <!-- Minimize/Maximize toggle button -->
       <button id="toggleControls" class="absolute -top-10 left-0 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-blue-700 focus:outline-none shadow-md">
         <span id="toggleIcon">-</span>
       </button>
-      <!-- Controls panel -->
       <div id="controlsPanel" class="bg-white p-6 rounded-lg shadow-xl w-100 max-w-xs bg-opacity-90 backdrop-blur-sm">
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Poster Controls</h3>
         <div class="space-y-4">
@@ -156,29 +164,27 @@
       arObject.visible = false;
       scene.addNode(arObject);
 
-      // Create a simple plane with texture instead of GLTF model
+      // Create a simple plane with texture
       function createTexturePlane(pngUrl) {
         console.log('Creating texture plane with URL:', pngUrl);
         const planeNode = new Node();
         
-        // Create plane geometry
         const planeGeometry = {
           positions: new Float32Array([
-            -0.5, -0.5, 0,  // bottom left
-             0.5, -0.5, 0,  // bottom right
-             0.5,  0.5, 0,  // top right
-            -0.5,  0.5, 0   // top left
+            -0.5, -0.5, 0,
+             0.5, -0.5, 0,
+             0.5,  0.5, 0,
+            -0.5,  0.5, 0
           ]),
           indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
           texCoords: new Float32Array([
-            0, 1,  // Flip Y to handle texture orientation
+            0, 1,
             1, 1,
             1, 0,
             0, 0
           ])
         };
 
-        // Create material with PNG texture
         const material = {
           baseColorTexture: { uri: pngUrl },
           metallicFactor: 0,
@@ -186,7 +192,6 @@
           alphaMode: 'OPAQUE'
         };
 
-        // Add the plane mesh to the node
         const meshNode = new MeshNode({ 
           mesh: new Mesh({ 
             geometry: planeGeometry,
@@ -196,21 +201,19 @@
         planeNode.addNode(meshNode);
         console.log('Plane node created:', { geometry: planeGeometry, material });
 
-        // Set initial scale
         vec3.set(planeNode.scale, 0.5, 0.5, 0.5);
-        
         return planeNode;
       }
 
-      // Create the wall art with your PNG
+      // Create wall art
       let wallArt = createTexturePlane('media/images/wallart.png');
       arObject.addNode(wallArt);
-      console.log('Wall art node added to arObject:', wallArt);
+      console.log('Wall art node added to arObject:', { visible: wallArt.visible });
 
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
       scene.addNode(reticle);
-      console.log('Reticle node added:', reticle);
+      console.log('Reticle node added:', { visible: reticle.visible });
 
       scene.clear = false;
 
@@ -248,16 +251,13 @@
         mat4.getTranslation(position, matrix);
         mat4.getRotation(rotation, matrix);
 
-        // Apply position offsets
         let offset = vec3.fromValues(controls.posX, controls.posY, controls.posZ);
         vec3.add(position, position, offset);
 
-        // Apply user rotations
         let userRotation = quat.create();
         quat.fromEuler(userRotation, controls.rotX, controls.rotY, controls.rotZ);
         quat.multiply(rotation, rotation, userRotation);
 
-        // Apply scale
         let scaleMatrix = mat4.create();
         mat4.fromScaling(scaleMatrix, [controls.scale, controls.scale, controls.scale]);
         let transformMatrix = mat4.create();
@@ -267,7 +267,6 @@
         currentPoster.matrix = transformMatrix;
         console.log('Poster transform updated:', { scale: controls.scale, position, rotation: controls });
 
-        // Update sliders
         document.getElementById('scale').value = controls.scale;
         document.getElementById('posX').value = controls.posX;
         document.getElementById('posY').value = controls.posY;
@@ -277,25 +276,21 @@
         document.getElementById('rotZ').value = controls.rotZ;
       }
 
-      // Raycasting to check if touch hits the poster
       function rayIntersectsPoster(touchX, touchY, canvas, pose) {
         if (!currentPoster || !pose) {
           console.log('Ray intersect skipped: no poster or pose', { currentPoster, pose });
           return false;
         }
 
-        // Convert touch to normalized device coordinates (-1 to 1)
         const rect = canvas.getBoundingClientRect();
         const ndcX = (2.0 * touchX - rect.width) / rect.width;
         const ndcY = (rect.height - 2.0 * touchY) / rect.height;
 
-        // Get projection and view matrices
         const projectionMatrix = mat4.create();
-        const fov = 60 * Math.PI / 180; // Assume 60° FOV
+        const fov = 60 * Math.PI / 180;
         mat4.perspective(projectionMatrix, fov, rect.width / rect.height, 0.1, 1000.0);
         const viewMatrix = pose.views[0].transform.inverse.matrix;
 
-        // Create ray in world space
         const rayOrigin = vec3.create();
         const rayEnd = vec3.fromValues(ndcX, ndcY, -1);
         const rayOriginView = vec3.fromValues(ndcX, ndcY, -1);
@@ -309,13 +304,11 @@
         vec3.subtract(rayDirection, rayEnd, rayOrigin);
         vec3.normalize(rayDirection, rayDirection);
 
-        // Get poster's world position
         const posterMatrix = currentPoster.matrix;
         const posterPosition = vec3.create();
         mat4.getTranslation(posterPosition, posterMatrix);
 
-        // Approximate poster as a sphere (radius based on scale)
-        const radius = controls.scale * 0.25; // Assume poster is ~0.5m wide
+        const radius = controls.scale * 0.25;
         const ray = new Ray(rayOrigin, rayDirection);
         const toPoster = vec3.create();
         vec3.subtract(toPoster, posterPosition, rayOrigin);
@@ -337,9 +330,12 @@
           const header = document.querySelector('header');
           const xrButtonContainer = document.getElementById('xrButtonContainer');
           const noXRMessage = document.getElementById('noXRMessage');
+          const testPlaceButton = document.getElementById('testPlaceButton');
 
           if (!header || !xrButtonContainer) {
             console.error('Header or XR button container not found');
+            noXRMessage.textContent = 'Error: Header or button container missing';
+            noXRMessage.style.display = 'block';
             return;
           }
 
@@ -351,7 +347,6 @@
             textExitXRTitle: "EXIT AR",
           });
 
-          // Ensure button is visible
           xrButton.domElement.style.display = 'block';
           xrButton.domElement.style.margin = '10px 0';
           xrButton.domElement.style.padding = '10px 20px';
@@ -360,7 +355,6 @@
           xrButton.domElement.style.borderRadius = '5px';
           xrButton.domElement.style.border = 'none';
           xrButton.domElement.style.cursor = 'pointer';
-
           xrButtonContainer.appendChild(xrButton.domElement);
           console.log('XR button appended:', xrButton.domElement);
 
@@ -370,6 +364,7 @@
               .then((supported) => {
                 console.log('Immersive AR supported:', supported);
                 xrButton.enabled = supported;
+                testPlaceButton.style.display = supported ? 'none' : 'block';
                 if (!supported) {
                   noXRMessage.style.display = 'block';
                   console.log('Showing no XR message');
@@ -379,17 +374,157 @@
                 console.error('Error checking immersive-ar support:', error);
                 xrButton.enabled = false;
                 noXRMessage.style.display = 'block';
+                testPlaceButton.style.display = 'block';
               });
           } else {
             console.log('WebXR API not available');
             xrButton.enabled = false;
             xrButton.domElement.textContent = 'AR NOT FOUND';
             noXRMessage.style.display = 'block';
+            testPlaceButton.style.display = 'block';
+          }
+
+          // Setup control listeners
+          document.getElementById('scale').addEventListener('input', (e) => {
+            controls.scale = parseFloat(e.target.value);
+            console.log('Scale updated:', controls.scale);
+            updatePosterTransform();
+          });
+          document.getElementById('posX').addEventListener('input', (e) => {
+            controls.posX = parseFloat(e.target.value);
+            console.log('PosX updated:', controls.posX);
+            updatePosterTransform();
+          });
+          document.getElementById('posY').addEventListener('input', (e) => {
+            controls.posY = parseFloat(e.target.value);
+            console.log('PosY updated:', controls.posY);
+            updatePosterTransform();
+          });
+          document.getElementById('posZ').addEventListener('input', (e) => {
+            controls.posZ = parseFloat(e.target.value);
+            console.log('PosZ updated:', controls.posZ);
+            updatePosterTransform();
+          });
+          document.getElementById('rotX').addEventListener('input', (e) => {
+            controls.rotX = parseFloat(e.target.value);
+            console.log('RotX updated:', controls.rotX);
+            updatePosterTransform();
+          });
+          document.getElementById('rotY').addEventListener('input', (e) => {
+            controls.rotY = parseFloat(e.target.value);
+            console.log('RotY updated:', controls.rotY);
+            updatePosterTransform();
+          });
+          document.getElementById('rotZ').addEventListener('input', (e) => {
+            controls.rotZ = parseFloat(e.target.value);
+            console.log('RotZ updated:', controls.rotZ);
+            updatePosterTransform();
+          });
+          document.getElementById('removePoster').addEventListener('click', () => {
+            if (currentPoster) {
+              console.log('Removing poster:', currentPoster);
+              scene.removeNode(currentPoster);
+              currentPoster = null;
+              document.getElementById('controls').style.display = 'none';
+              document.getElementById('guidance').style.display = 'block';
+              controls = { scale: 0.5, posX: 0, posY: 0, posZ: 0, rotX: 0, rotY: 0, rotZ: 0 };
+              updatePosterTransform();
+            }
+          });
+
+          document.getElementById('toggleControls').addEventListener('click', () => {
+            const controlsPanel = document.getElementById('controlsPanel');
+            const toggleIcon = document.getElementById('toggleIcon');
+            if (controlsPanel.style.display === 'none') {
+              controlsPanel.style.display = 'block';
+              toggleIcon.textContent = '-';
+              console.log('Controls panel expanded');
+            } else {
+              controlsPanel.style.display = 'none';
+              toggleIcon.textContent = '+';
+              console.log('Controls panel minimized');
+            }
+          });
+
+          // Test place button
+          testPlaceButton.addEventListener('click', () => {
+            console.log('Test place button clicked');
+            let testMatrix = mat4.fromTranslation(mat4.create(), [0, 0, -1]);
+            addARObjectAt(testMatrix);
+          });
+
+          const canvas = document.querySelector('canvas');
+          if (canvas) {
+            console.log('Canvas found, setting up touch controls');
+            canvas.addEventListener('touchstart', (e) => {
+              if (!currentPoster || !lastPose) {
+                console.log('Touchstart skipped: no poster or pose');
+                return;
+              }
+              e.preventDefault();
+              const touchX = e.touches[0].clientX;
+              const touchY = e.touches[0].clientY;
+              if (e.touches.length === 1 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
+                isDragging = true;
+                lastTouchX = touchX;
+                lastTouchY = touchY;
+                console.log('Dragging started at:', { touchX, touchY });
+              } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
+                isPinching = true;
+                const dx = e.touches[1].clientX - e.touches[0].clientX;
+                const dy = e.touches[1].clientY - e.touches[0].clientY;
+                initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+                initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
+                console.log('Pinching started:', { initialPinchAngle, initialPinchDistance });
+              }
+            });
+
+            canvas.addEventListener('touchmove', (e) => {
+              if (!currentPoster) {
+                console.log('Touchmove skipped: no poster');
+                return;
+              }
+              e.preventDefault();
+              if (isDragging && e.touches.length === 1) {
+                const touchX = e.touches[0].clientX;
+                const touchY = e.touches[0].clientY;
+                const deltaX = touchX - lastTouchX;
+                const deltaY = touchY - lastTouchY;
+                controls.rotY += deltaX * 0.5;
+                controls.rotX += deltaY * 0.5;
+                lastTouchX = touchX;
+                lastTouchY = touchY;
+                console.log('Dragging:', { deltaX, deltaY, rotX: controls.rotX, rotY: controls.rotY });
+                updatePosterTransform();
+              } else if (isPinching && e.touches.length === 2) {
+                const dx = e.touches[1].clientX - e.touches[0].clientX;
+                const dy = e.touches[1].clientY - e.touches[0].clientY;
+                const currentDistance = Math.sqrt(dx * dx + dy * dy);
+                const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+                const scaleChange = currentDistance / initialPinchDistance;
+                controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
+                controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
+                initialPinchDistance = currentDistance;
+                initialPinchAngle = currentAngle;
+                console.log('Pinching:', { scale: controls.scale, rotZ: controls.rotZ });
+                updatePosterTransform();
+              }
+            });
+
+            canvas.addEventListener('touchend', (e) => {
+              isDragging = false;
+              isPinching = false;
+              console.log('Touch ended');
+            });
+          } else {
+            console.log('Canvas not found');
           }
 
           console.log('initXR completed');
         } catch (error) {
           console.error('initXR error:', error);
+          document.getElementById('noXRMessage').style.display = 'block';
+          document.getElementById('noXRMessage').textContent = `Error initializing AR: ${error.message}`;
         }
       }
 
@@ -400,12 +535,15 @@
           optionalFeatures: ['hit-test'],
           domOverlay: { root: document.body }
         }).then((session) => {
-          console.log('AR session started');
+          console.log('AR session started successfully');
           xrButton.setSession(session);
+          document.getElementById('testPlaceButton').style.display = 'none';
           onSessionStarted(session);
         }).catch((error) => {
           console.error('AR session error:', error);
           alert(`AR Session Error: ${error.message}`);
+          document.getElementById('noXRMessage').style.display = 'block';
+          document.getElementById('noXRMessage').textContent = `AR Session Error: ${error.message}`;
         });
       }
 
@@ -451,7 +589,7 @@
           xrViewerSpace = refSpace;
           console.log('Viewer reference space acquired');
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
-            xrHitTestimonialSource = hitTestSource;
+            xrHitTestSource = hitTestSource;
             console.log('Hit test source acquired');
           }).catch((error) => {
             console.error('Hit test source error:', error);
@@ -468,23 +606,23 @@
           alert(`RefSpace Error: ${error.message}`);
         });
 
-        // Show guidance initially
         document.getElementById('guidance').style.display = 'block';
       }
 
-      function onEndSession() {
+      function onEndSession(session) {
         if (xrHitTestSource) {
           xrHitTestSource.cancel();
           xrHitTestSource = null;
           console.log('Hit test source canceled');
         }
         session.end();
-        console.log('Session ended');
+        console.log('AR session ended');
       }
 
-      function onSessionEnded() {
+      function onSessionEnded(event) {
         xrButton.setSession(null);
         document.getElementById('noXRMessage').style.display = 'none';
+        document.getElementById('testPlaceButton').style.display = 'block';
         console.log('Session ended event');
       }
 
@@ -501,7 +639,7 @@
         mat4.getRotation(rotation, hitMatrix);
 
         let upVector = vec3.fromValues(0, 1, 0);
-        vec3.transformQuat(upVector, upVector);
+        vec3.transformQuat(upVector, upVector, rotation);
         vec3.normalize(upVector, upVector);
 
         let surfaceNormal = vec3.create();
@@ -510,7 +648,7 @@
           surfaceNormal = vec3.clone(upVector);
           surfaceType = 'Floor';
         } else {
-          let viewerForward = vec3.fromValues(-90, 0, 0);
+          let viewerForward = vec3.fromValues(0, 0, -1);
           vec3.transformQuat(viewerForward, viewerForward, rotation);
           surfaceNormal = vec3.fromValues(viewerForward[0], 0, viewerForward[2]);
           vec3.normalize(surfaceNormal, surfaceNormal);
@@ -520,12 +658,7 @@
 
         console.log('Surface detected:', { surfaceType, upVector });
 
-        // Only place on walls
-        if (surfaceType !== 'Wall') {
-          console.log('Not a wall, skipping poster placement');
-          return;
-        }
-
+        // Simplify placement for testing
         let modelZ = vec3.fromValues(0, 0, -1);
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
@@ -536,7 +669,6 @@
         mat4.fromRotationTranslation(finalMatrix, rotation, position);
         mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
-        // Apply 90-degree y-rotation
         let yRotationQuat = quat.create();
         quat.fromEuler(yRotationQuat, 0, 90, 0);
         let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
@@ -547,12 +679,11 @@
         currentPoster = newObject;
         baseMatrix = mat4.clone(finalMatrix);
 
-        console.log('Poster placed:', { position, rotation, matrix: finalMatrix });
+        console.log('Poster placed:', { position, rotation, matrix: finalMatrix, visible: newObject.visible });
 
         updatePosterTransform();
         scene.addNode(newObject);
 
-        // Show controls, hide guidance
         document.getElementById('controls').style.display = 'block';
         document.getElementById('guidance').style.display = 'none';
       }
@@ -570,7 +701,6 @@
       }
 
       function onXRFrame(t, frame) {
-        console.log('Rendering frame started');
         let session = frame.session;
         let pose = frame.getViewerPose(xrRefSpace);
         lastPose = pose;
@@ -580,7 +710,7 @@
 
         if (xrHitTestSource && pose && !currentPoster) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
-          console.log('Hit test results:', hitTestResults.length);
+          console.log('Hit test results:', { count: hitTestResults.length });
           if (hitTestResults.length > 0) {
             let hitPose = hitTestResults[0].getPose(xrRefSpace);
             let hitMatrix = hitPose.transform.matrix;
@@ -594,18 +724,18 @@
             vec3.normalize(upVector, upVector);
 
             let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
-            console.log('Surface detected:', { surfaceType, hitMatrix });
+            console.log('Surface detected:', { surfaceType, position });
 
             if (surfaceType === 'Wall') {
               reticle.visible = true;
               reticle.matrix = hitMatrix;
               document.getElementById('guidance').style.display = 'none';
-              console.log('Reticle shown at:', hitMatrix);
+              console.log('Reticle shown at:', { matrix: hitMatrix });
             }
           }
         }
 
-        console.log('Rendering frame:', { hasPoster: !!currentPoster, reticleVisible: reticle.visible });
+        console.log('Rendering frame:', { hasPoster: !!currentPoster, reticleVisible: reticle.visible, pose: !!pose });
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
         scene.drawXRFrame(frame, pose);
