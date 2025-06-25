@@ -148,6 +148,7 @@
         let texture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, texture);
+        console.log('Texture bound:', gl.getParameter(gl.TEXTURE_BINDING_2D));
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -212,7 +213,6 @@
           0, 2, 3,
         ]);
 
-        // Define shaders
         const vertexShader = `
           precision highp float;
           attribute vec3 POSITION;
@@ -223,7 +223,15 @@
           varying vec2 vTexCoord;
           void main() {
             vTexCoord = TEXCOORD_0;
-            gl_Position = PROJECTION_MATRIX * VIEW_MATRIX * MODEL_MATRIX * vec4(POSITION, 1.0);
+            vec4 pos = MODEL_MATRIX * vec4(POSITION, 1.0);
+            pos = VIEW_MATRIX * pos;
+            pos = PROJECTION_MATRIX * pos;
+            // Debug output
+            if (pos.z > 0.0) {
+              gl_Position = vec4(0.0, 0.0, -10.0, 1.0); // Force off-screen if behind camera
+            } else {
+              gl_Position = pos;
+            }
           }
         `;
 
@@ -233,8 +241,12 @@
           uniform sampler2D uTexture;
           void main() {
             vec4 color = texture2D(uTexture, vTexCoord);
-            if (color.a < 0.1) discard;
-            gl_FragColor = color;
+            // Debug: show red if texture is missing
+            if (color.a == 0.0) {
+              gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+            } else {
+              gl_FragColor = color;
+            }
           }
         `;
 
@@ -651,7 +663,7 @@
         const newPoster = new Node();
         newPoster.name = 'Poster';
         newPoster.visible = true;
-        const newWallArt = createImagePlaneNode('media/images/wallart.png');
+        const newWallArt = createImagePlaneNode('/media/images/wallart.png');
         newWallArt.visible = true;
         newPoster.addNode(newWallArt);
         currentPoster = newPoster;
