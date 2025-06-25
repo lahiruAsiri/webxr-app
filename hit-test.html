@@ -563,7 +563,7 @@
         reticle.visible = false;
         document.getElementById('guidance').style.display = currentPoster ? 'none' : 'block';
 
-        if (xrHit therapeuticsSource && pose && !currentPoster) {
+        if (xrHitTestSource && pose && !currentPoster) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
             let hitPose = hitTestResults[0].getPose(xrRefSpace);
