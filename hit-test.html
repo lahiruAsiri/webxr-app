@@ -508,7 +508,26 @@
 
           const canvas = document.querySelector('canvas');
           if (canvas) {
-            console.log('Canvas found, setting up touch controls');
+            console.log('Canvas found, setting up WebGL context');
+            gl = createWebGLContext({
+              canvas: canvas,
+              xrCompatible: true,
+              alpha: true
+            });
+            
+            if (!gl) {
+              console.error('Failed to create WebGL context');
+              document.getElementById('noXRMessage').textContent = 'WebGL initialization failed';
+              document.getElementById('noXRMessage').style.display = 'block';
+              return;
+            }
+
+            renderer = new Renderer(gl);
+            scene.setRenderer(renderer);
+            console.log('WebGL context and renderer initialized');
+
+            // Setup touch controls
+            console.log('Setting up touch controls');
             canvas.addEventListener('touchstart', (e) => {
               if (!currentPoster || !lastPose) {
                 console.log('Touchstart skipped: no poster or pose');
@@ -517,18 +536,21 @@
               e.preventDefault();
               const touchX = e.touches[0].clientX;
               const touchY = e.touches[0].clientY;
-              if (e.touches.length === 1 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
-                isDragging = true;
-                lastTouchX = touchX;
-                lastTouchY = touchY;
-                console.log('Dragging started at:', { touchX, touchY });
-              } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
-                isPinching = true;
-                const dx = e.touches[1].clientX - e.touches[0].clientX;
-                const dy = e.touches[1].clientY - e.touches[0].clientY;
-                initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-                initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
-                console.log('Pinching started:', { initialPinchAngle, initialPinchDistance });
+              
+              if (rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
+                if (e.touches.length === 1) {
+                  isDragging = true;
+                  lastTouchX = touchX;
+                  lastTouchY = touchY;
+                  console.log('Dragging started');
+                } else if (e.touches.length === 2) {
+                  isPinching = true;
+                  const dx = e.touches[1].clientX - e.touches[0].clientX;
+                  const dy = e.touches[1].clientY - e.touches[0].clientY;
+                  initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
+                  initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+                  console.log('Pinching started');
+                }
               }
             });
 
@@ -570,14 +592,16 @@
               console.log('Touch ended');
             });
           } else {
-            console.log('Canvas not found');
+            console.error('Canvas element not found');
+            document.getElementById('noXRMessage').textContent = 'Canvas element missing';
+            document.getElementById('noXRMessage').style.display = 'block';
           }
 
           console.log('initXR completed');
         } catch (error) {
           console.error('initXR error:', error);
           document.getElementById('noXRMessage').style.display = 'block';
-          document.getElementById('noXRMessage').textContent = `Error initializing AR: ${error.message}`;
+          document.getElementById('noXRMessage').textContent = `Error: ${error.message}`;
         }
       }
 
@@ -602,62 +626,50 @@
 
       function onSessionStarted(session) {
         console.log('Session started');
+        
+        // Reset pose tracking
+        lastPose = null;
+        
         session.addEventListener('end', onSessionEnded);
         session.addEventListener('select', onSelect);
 
         if (!gl) {
-          try {
-            gl = createWebGLContext({
-              xrCompatible: true,
-              alpha: true
-            });
-            if (!gl) {
-              console.error('Failed to create WebGL context');
-              alert('Error: Failed to create WebGL context');
-              session.end();
-              return;
-            }
-            renderer = new Renderer(gl);
-            scene.setRenderer(renderer);
-            console.log('WebGL context and renderer initialized');
-          } catch (error) {
-            console.error('WebGL error:', error);
-            alert(`WebGL Error: ${error.message}`);
-            session.end();
-            return;
-          }
-        }
-
-        try {
-          session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
-          console.log('Render state updated with XRWebGLLayer');
-        } catch (error) {
-          console.error('XRWebGLLayer error:', error);
-          alert(`XRWebGLLayer Error: ${error.message}`);
+          console.error('WebGL context not initialized');
           session.end();
           return;
         }
 
-        session.requestReferenceSpace('viewer').then((refSpace) => {
-          xrViewerSpace = refSpace;
-          console.log('Viewer reference space acquired');
-          session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
-            xrHitTestSource = hitTestSource;
-            console.log('Hit test source acquired');
-          }).catch((error) => {
-            console.error('Hit test source error:', error);
-            alert(`HitTest Error: ${error.message}`);
+        try {
+          // Setup session with our canvas
+          session.updateRenderState({
+            baseLayer: new XRWebGLLayer(session, gl)
           });
-        });
-
-        session.requestReferenceSpace('local').then((refSpace) => {
-          xrRefSpace = refSpace;
-          console.log('Local reference space acquired');
-          session.requestAnimationFrame(onXRFrame);
-        }).catch((error) => {
-          console.error('Reference space error:', error);
-          alert(`RefSpace Error: ${error.message}`);
-        });
+          
+          // Request reference spaces
+          Promise.all([
+            session.requestReferenceSpace('viewer'),
+            session.requestReferenceSpace('local')
+          ]).then(([viewerSpace, localSpace]) => {
+            xrViewerSpace = viewerSpace;
+            xrRefSpace = localSpace;
+            
+            // Request hit test source
+            return session.requestHitTestSource({ space: xrViewerSpace });
+          }).then((hitTestSource) => {
+            xrHitTestSource = hitTestSource;
+            console.log('XR setup complete');
+            
+            // Start the AR loop
+            session.requestAnimationFrame(onXRFrame);
+          }).catch((error) => {
+            console.error('XR setup error:', error);
+            session.end();
+          });
+          
+        } catch (error) {
+          console.error('Session setup error:', error);
+          session.end();
+        }
 
         document.getElementById('guidance').style.display = 'block';
       }
@@ -746,8 +758,6 @@
         document.getElementById('guidance').style.display = 'none';
       }
 
-      let rayOrigin = vec3.create();
-      let rayDirection = vec3.create();
       function onSelect(event) {
         console.log('Select event triggered');
         if (reticle.visible) {
@@ -759,49 +769,38 @@
       }
 
       function onXRFrame(t, frame) {
-        let session = frame.session;
-        let pose = frame.getViewerPose(xrRefSpace);
-        lastPose = pose;
+        const session = frame.session;
+        lastPose = frame.getViewerPose(xrRefSpace);
 
+        // Reset reticle visibility
         reticle.visible = false;
+        
+        // Show guidance if no poster placed
         document.getElementById('guidance').style.display = currentPoster ? 'none' : 'block';
 
-        if (xrHitTestSource && pose && !currentPoster) {
-          let hitTestResults = frame.getHitTestResults(xrHitTestSource);
-          console.log('Hit test results:', { count: hitTestResults.length });
+        // Perform hit test if we don't have a poster yet
+        if (xrHitTestSource && lastPose && !currentPoster) {
+          const hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
-            let hitPose = hitTestResults[0].getPose(xrRefSpace);
-            let hitMatrix = hitPose.transform.matrix;
-            let position = vec3.create();
-            let rotation = quat.create();
-            mat4.getTranslation(position, hitMatrix);
-            mat4.getRotation(rotation, hitMatrix);
-
-            let upVector = vec3.fromValues(0, 1, 0);
-            vec3.transformQuat(upVector, upVector, rotation);
-            vec3.normalize(upVector, upVector);
-
-            let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
-            console.log('Surface detected:', { surfaceType, position });
-
-            if (surfaceType === 'Wall') {
-              reticle.matrix = hitMatrix;
+            const hit = hitTestResults[0];
+            const hitPose = hit.getPose(xrRefSpace);
+            
+            // Only show reticle on walls
+            const normal = vec3.fromValues(0, 1, 0);
+            vec3.transformQuat(normal, normal, quat.fromMat4(quat.create(), hitPose.transform.matrix));
+            
+            if (Math.abs(normal[1]) < 0.7) { // Not primarily vertical (not floor/ceiling)
+              reticle.matrix = hitPose.transform.matrix;
               reticle.visible = true;
               document.getElementById('guidance').style.display = 'none';
-              console.log('Reticle shown at:', { matrix: hitMatrix });
             }
           }
         }
 
-        console.log('Rendering frame:', { 
-          hasPoster: !!currentPoster, 
-          reticleVisible: reticle.visible, 
-          pose: !!pose,
-          posterVisible: currentPoster ? currentPoster.visible : false
-        });
+        // Render the frame
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
-        scene.drawXRFrame(frame, pose);
+        scene.drawXRFrame(frame, lastPose);
         scene.endFrame();
       }
 
