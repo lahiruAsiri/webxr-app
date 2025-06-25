@@ -140,7 +140,7 @@
       }
 
       function onSessionStarted(session) {
-        console.log('AR session started');
+        log('AR session started');
         session.addEventListener('end', onSessionEnded);
         session.addEventListener('select', onSelect);
 
