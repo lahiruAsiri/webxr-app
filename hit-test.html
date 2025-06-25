@@ -24,6 +24,24 @@
         font-family: Arial, sans-serif;
         display: none;
       }
+      #debugConsole {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 150px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 10px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: block;
+      }
+      #debugConsole p {
+        margin: 2px 0;
+      }
     </style>
     <title>Hit Test</title>
   </head>
@@ -81,6 +99,7 @@
         </div>
       </div>
     </div>
+    <div id="debugConsole"></div>
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
@@ -91,6 +110,18 @@
       import {Mesh} from './js/render/core/mesh.js';
       import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
       import {Ray} from './js/render/math/ray.js';
+
+      // Override console.log to append to debug console
+      const originalConsoleLog = console.log;
+      console.log = function(...args) {
+        const debugConsole = document.getElementById('debugConsole');
+        const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' ');
+        const p = document.createElement('p');
+        p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        debugConsole.appendChild(p);
+        debugConsole.scrollTop = debugConsole.scrollHeight;
+        originalConsoleLog.apply(console, args);
+      };
 
       // XR globals
       let xrButton = null;
@@ -110,6 +141,7 @@
 
       // Create a simple plane with texture instead of GLTF model
       function createTexturePlane(pngUrl) {
+        console.log('Creating texture plane with URL:', pngUrl);
         const planeNode = new Node();
         
         // Create plane geometry
@@ -122,10 +154,10 @@
           ]),
           indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
           texCoords: new Float32Array([
-            0, 0,  // bottom left
-            1, 0,  // bottom right
-            1, 1,  // top right
-            0, 1   // top left
+            0, 1,  // Flip Y to handle texture orientation
+            1, 1,
+            1, 0,
+            0, 0
           ])
         };
 
@@ -138,12 +170,14 @@
         };
 
         // Add the plane mesh to the node
-        planeNode.addNode(new MeshNode({ 
+        const meshNode = new MeshNode({ 
           mesh: new Mesh({ 
             geometry: planeGeometry,
             material: material 
           })
-        }));
+        });
+        planeNode.addNode(meshNode);
+        console.log('Plane node created:', { geometry: planeGeometry, material });
 
         // Set initial scale
         vec3.set(planeNode.scale, 0.5, 0.5, 0.5);
@@ -154,10 +188,12 @@
       // Create the wall art with your PNG
       let wallArt = createTexturePlane('media/images/wallart.png');
       arObject.addNode(wallArt);
+      console.log('Wall art node added to arObject:', wallArt);
 
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
       scene.addNode(reticle);
+      console.log('Reticle node added:', reticle);
 
       scene.clear = false;
 
@@ -184,7 +220,10 @@
       let lastPose = null;
 
       function updatePosterTransform() {
-        if (!currentPoster) return;
+        if (!currentPoster) {
+          console.log('No current poster to update');
+          return;
+        }
 
         let matrix = mat4.clone(baseMatrix);
         let position = vec3.create();
@@ -209,6 +248,7 @@
         mat4.multiply(transformMatrix, transformMatrix, scaleMatrix);
 
         currentPoster.matrix = transformMatrix;
+        console.log('Poster transform updated:', { scale: controls.scale, position, rotation: controls });
 
         // Update sliders
         document.getElementById('scale').value = controls.scale;
@@ -222,7 +262,10 @@
 
       // Raycasting to check if touch hits the poster
       function rayIntersectsPoster(touchX, touchY, canvas, pose) {
-        if (!currentPoster || !pose) return false;
+        if (!currentPoster || !pose) {
+          console.log('Ray intersect skipped: no poster or pose', { currentPoster, pose });
+          return false;
+        }
 
         // Convert touch to normalized device coordinates (-1 to 1)
         const rect = canvas.getBoundingClientRect();
@@ -260,14 +303,19 @@
         const toPoster = vec3.create();
         vec3.subtract(toPoster, posterPosition, rayOrigin);
         const t = vec3.dot(toPoster, rayDirection);
-        if (t < 0) return false;
+        if (t < 0) {
+          console.log('Ray does not intersect poster (behind camera)');
+          return false;
+        }
         const closestPoint = vec3.create();
         vec3.scaleAndAdd(closestPoint, rayOrigin, rayDirection, t);
         const distance = vec3.distance(closestPoint, posterPosition);
+        console.log('Ray intersect check:', { distance, radius });
         return distance < radius;
       }
 
       function initXR() {
+        console.log('Initializing WebXR');
         xrButton = new WebXRButton({
           onRequestSession: onRequestSession,
           onEndSession: onEndSession,
@@ -280,41 +328,55 @@
         if (navigator.xr) {
           navigator.xr.isSessionSupported('immersive-ar')
             .then((supported) => {
+              console.log('AR support:', supported);
               xrButton.enabled = supported;
+            })
+            .catch((error) => {
+              console.error('Error checking AR support:', error);
             });
+        } else {
+          console.log('WebXR not available in this browser');
         }
 
         // Setup control listeners
         document.getElementById('scale').addEventListener('input', (e) => {
           controls.scale = parseFloat(e.target.value);
+          console.log('Scale updated:', controls.scale);
           updatePosterTransform();
         });
         document.getElementById('posX').addEventListener('input', (e) => {
           controls.posX = parseFloat(e.target.value);
+          console.log('PosX updated:', controls.posX);
           updatePosterTransform();
         });
         document.getElementById('posY').addEventListener('input', (e) => {
           controls.posY = parseFloat(e.target.value);
+          console.log('PosY updated:', controls.posY);
           updatePosterTransform();
         });
         document.getElementById('posZ').addEventListener('input', (e) => {
           controls.posZ = parseFloat(e.target.value);
+          console.log('PosZ updated:', controls.posZ);
           updatePosterTransform();
         });
         document.getElementById('rotX').addEventListener('input', (e) => {
           controls.rotX = parseFloat(e.target.value);
+          console.log('RotX updated:', controls.rotX);
           updatePosterTransform();
         });
         document.getElementById('rotY').addEventListener('input', (e) => {
           controls.rotY = parseFloat(e.target.value);
+          console.log('RotY updated:', controls.rotY);
           updatePosterTransform();
         });
         document.getElementById('rotZ').addEventListener('input', (e) => {
           controls.rotZ = parseFloat(e.target.value);
+          console.log('RotZ updated:', controls.rotZ);
           updatePosterTransform();
         });
         document.getElementById('removePoster').addEventListener('click', () => {
           if (currentPoster) {
+            console.log('Removing poster:', currentPoster);
             scene.removeNode(currentPoster);
             currentPoster = null;
             document.getElementById('controls').style.display = 'none';
@@ -332,17 +394,23 @@
           if (controlsPanel.style.display === 'none') {
             controlsPanel.style.display = 'block';
             toggleIcon.textContent = '-';
+            console.log('Controls panel expanded');
           } else {
             controlsPanel.style.display = 'none';
             toggleIcon.textContent = '+';
+            console.log('Controls panel minimized');
           }
         });
 
         // Setup touch controls on canvas
         const canvas = document.querySelector('canvas');
         if (canvas) {
+          console.log('Canvas found, setting up touch controls');
           canvas.addEventListener('touchstart', (e) => {
-            if (!currentPoster || !lastPose) return;
+            if (!currentPoster || !lastPose) {
+              console.log('Touchstart skipped: no poster or pose');
+              return;
+            }
             e.preventDefault();
             const touchX = e.touches[0].clientX;
             const touchY = e.touches[0].clientY;
@@ -350,40 +418,45 @@
               isDragging = true;
               lastTouchX = touchX;
               lastTouchY = touchY;
+              console.log('Dragging started at:', { touchX, touchY });
             } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
               isPinching = true;
               const dx = e.touches[1].clientX - e.touches[0].clientX;
               const dy = e.touches[1].clientY - e.touches[0].clientY;
               initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
               initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
+              console.log('Pinching started:', { initialPinchAngle, initialPinchDistance });
             }
           });
 
           canvas.addEventListener('touchmove', (e) => {
-            if (!currentPoster) return;
+            if (!currentPoster) {
+              console.log('Touchmove skipped: no poster');
+              return;
+            }
             e.preventDefault();
             if (isDragging && e.touches.length === 1) {
               const touchX = e.touches[0].clientX;
               const touchY = e.touches[0].clientY;
               const deltaX = touchX - lastTouchX;
               const deltaY = touchY - lastTouchY;
-              controls.rotY += deltaX * 0.5; // Horizontal drag -> Y rotation
-              controls.rotX += deltaY * 0.5; // Vertical drag -> X rotation
+              controls.rotY += deltaX * 0.5;
+              controls.rotX += deltaY * 0.5;
               lastTouchX = touchX;
               lastTouchY = touchY;
+              console.log('Dragging:', { deltaX, deltaY, rotX: controls.rotX, rotY: controls.rotY });
               updatePosterTransform();
             } else if (isPinching && e.touches.length === 2) {
               const dx = e.touches[1].clientX - e.touches[0].clientX;
               const dy = e.touches[1].clientY - e.touches[0].clientY;
               const currentDistance = Math.sqrt(dx * dx + dy * dy);
               const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-              // Adjust scale based on pinch distance
               const scaleChange = currentDistance / initialPinchDistance;
               controls.scale = Math.min(Math.max(controls.scale * scaleChange, 0.1), 2.0);
-              // Adjust Z rotation based on angle
               controls.rotZ += (currentAngle - initialPinchAngle) * 0.5;
               initialPinchDistance = currentDistance;
               initialPinchAngle = currentAngle;
+              console.log('Pinching:', { scale: controls.scale, rotZ: controls.rotZ });
               updatePosterTransform();
             }
           });
@@ -391,24 +464,31 @@
           canvas.addEventListener('touchend', (e) => {
             isDragging = false;
             isPinching = false;
+            console.log('Touch ended');
           });
+        } else {
+          console.log('Canvas not found');
         }
       }
 
       function onRequestSession() {
+        console.log('Requesting AR session');
         return navigator.xr.requestSession('immersive-ar', {
           requiredFeatures: ['local', 'dom-overlay'],
           optionalFeatures: ['hit-test'],
           domOverlay: { root: document.body }
         }).then((session) => {
+          console.log('AR session started');
           xrButton.setSession(session);
           onSessionStarted(session);
         }).catch((error) => {
+          console.error('AR session error:', error);
           alert(`AR Session Error: ${error.message}`);
         });
       }
 
       function onSessionStarted(session) {
+        console.log('Session started');
         session.addEventListener('end', onSessionEnded);
         session.addEventListener('select', onSelect);
 
@@ -419,13 +499,16 @@
               alpha: true
             });
             if (!gl) {
+              console.error('Failed to create WebGL context');
               alert('Error: Failed to create WebGL context');
               session.end();
               return;
             }
             renderer = new Renderer(gl);
             scene.setRenderer(renderer);
+            console.log('WebGL context and renderer initialized');
           } catch (error) {
+            console.error('WebGL error:', error);
             alert(`WebGL Error: ${error.message}`);
             session.end();
             return;
@@ -434,7 +517,9 @@
 
         try {
           session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+          console.log('Render state updated with XRWebGLLayer');
         } catch (error) {
+          console.error('XRWebGLLayer error:', error);
           alert(`XRWebGLLayer Error: ${error.message}`);
           session.end();
           return;
@@ -442,17 +527,22 @@
 
         session.requestReferenceSpace('viewer').then((refSpace) => {
           xrViewerSpace = refSpace;
+          console.log('Viewer reference space acquired');
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
             xrHitTestSource = hitTestSource;
+            console.log('Hit test source acquired');
           }).catch((error) => {
+            console.error('Hit test source error:', error);
             alert(`HitTest Error: ${error.message}`);
           });
         });
 
         session.requestReferenceSpace('local').then((refSpace) => {
           xrRefSpace = refSpace;
+          console.log('Local reference space acquired');
           session.requestAnimationFrame(onXRFrame);
         }).catch((error) => {
+          console.error('Reference space error:', error);
           alert(`RefSpace Error: ${error.message}`);
         });
 
@@ -464,17 +554,22 @@
         if (xrHitTestSource) {
           xrHitTestSource.cancel();
           xrHitTestSource = null;
+          console.log('Hit test source canceled');
         }
         session.end();
+        console.log('AR session ended');
       }
 
       function onSessionEnded(event) {
         xrButton.setSession(null);
+        console.log('Session ended event');
       }
 
       function addARObjectAt(matrix) {
-        // Only place if no poster exists
-        if (currentPoster) return;
+        if (currentPoster) {
+          console.log('Poster already exists, skipping placement');
+          return;
+        }
 
         let hitMatrix = mat4.clone(matrix);
         let position = vec3.create();
@@ -500,8 +595,13 @@
           surfaceType = 'Wall';
         }
 
+        console.log('Surface detected:', { surfaceType, upVector });
+
         // Only place on walls
-        if (surfaceType !== 'Wall') return;
+        if (surfaceType !== 'Wall') {
+          console.log('Not a wall, skipping poster placement');
+          return;
+        }
 
         let modelZ = vec3.fromValues(0, 0, -1);
         let alignRotation = quat.create();
@@ -515,7 +615,7 @@
 
         // Apply 90-degree y-rotation
         let yRotationQuat = quat.create();
-        quat.fromEuler(yRotationQuat, 0, 90, 0); // 90 degrees around y-axis
+        quat.fromEuler(yRotationQuat, 0, 90, 0);
         let yRotationMatrix = mat4.fromQuat(mat4.create(), yRotationQuat);
         mat4.multiply(finalMatrix, finalMatrix, yRotationMatrix);
 
@@ -524,7 +624,8 @@
         currentPoster = newObject;
         baseMatrix = mat4.clone(finalMatrix);
 
-        // Apply current controls (with rotY initialized to 90)
+        console.log('Poster placed:', { position, rotation, matrix: finalMatrix });
+
         updatePosterTransform();
         scene.addNode(newObject);
 
@@ -536,8 +637,12 @@
       let rayOrigin = vec3.create();
       let rayDirection = vec3.create();
       function onSelect(event) {
+        console.log('Select event triggered');
         if (reticle.visible) {
+          console.log('Reticle visible, placing poster');
           addARObjectAt(reticle.matrix);
+        } else {
+          console.log('Reticle not visible, cannot place poster');
         }
       }
 
@@ -551,6 +656,7 @@
 
         if (xrHitTestSource && pose && !currentPoster) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
+          console.log('Hit test results:', hitTestResults.length);
           if (hitTestResults.length > 0) {
             let hitPose = hitTestResults[0].getPose(xrRefSpace);
             let hitMatrix = hitPose.transform.matrix;
@@ -564,15 +670,18 @@
             vec3.normalize(upVector, upVector);
 
             let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
+            console.log('Hit test surface:', { surfaceType, position });
 
             if (surfaceType === 'Wall') {
               reticle.visible = true;
               reticle.matrix = hitMatrix;
               document.getElementById('guidance').style.display = 'none';
+              console.log('Reticle shown at:', hitMatrix);
             }
           }
         }
 
+        console.log('Rendering frame:', { hasPoster: !!currentPoster, reticleVisible: reticle.visible });
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
         scene.drawXRFrame(frame, pose);
