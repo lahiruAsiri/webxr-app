@@ -115,20 +115,9 @@
         const err = gl.getError();
         if (err !== gl.NO_ERROR) {
           console.error("WebGL Error:", err);
-          logDebug(`WebGL Error: ${err}`);
           return false;
         }
         return true;
-      }
-
-      // Check WebGL texture state
-      function checkTexture(gl, texture) {
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        const level = 0;
-        const width = gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_WIDTH);
-        const height = gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_HEIGHT);
-        logDebug(`Texture dimensions: ${width}x${height}`);
-        return { width, height };
       }
 
       // XR globals
@@ -142,65 +131,6 @@
       let renderer = null;
       let scene = new Scene();
       scene.enableStats(false);
-
-      // Create debug plane node with solid color
-      function createDebugPlaneNode(color = [1, 0, 0, 1]) {
-        const planeNode = new Node();
-        planeNode.name = 'DebugPlane';
-        planeNode.visible = true;
-        logDebug('Creating debug plane node');
-
-        // Define plane geometry (0.5m x 0.5m, centered)
-        const vertices = new Float32Array([
-          -0.25, -0.25, 0.0, // bottom-left
-           0.25, -0.25, 0.0, // bottom-right
-           0.25,  0.25, 0.0, // top-right
-          -0.25,  0.25, 0.0, // top-left
-        ]);
-
-        const indices = new Uint16Array([
-          0, 1, 2,
-          0, 2, 3,
-        ]);
-
-        const vertexShader = `
-          precision highp float;
-          attribute vec3 POSITION;
-          uniform mat4 PROJECTION_MATRIX;
-          uniform mat4 VIEW_MATRIX;
-          uniform mat4 MODEL_MATRIX;
-          void main() {
-            gl_Position = PROJECTION_MATRIX * VIEW_MATRIX * MODEL_MATRIX * vec4(POSITION, 1.0);
-          }
-        `;
-
-        const fragmentShader = `
-          precision highp float;
-          void main() {
-            gl_FragColor = vec4(${color[0]}, ${color[1]}, ${color[2]}, ${color[3]});
-          }
-        `;
-
-        const material = new Material('DebugPlane', vertexShader, fragmentShader);
-        material.state = {
-          blend: false,
-          depthTest: true,
-          cullFace: false
-        };
-
-        const mesh = renderer.createSimpleMesh({}, {
-          positions: vertices,
-          indices: indices
-        }, material);
-
-        planeNode.addRenderPrimitive(renderer.createRenderPrimitive(
-          renderer.createPrimitiveFromMesh(mesh),
-          material
-        ));
-
-        logDebug('Debug plane node created');
-        return planeNode;
-      }
 
       // Create plane node for PNG wall art
       function createImagePlaneNode(imageUrl) {
@@ -233,29 +163,11 @@
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         checkGLErrors(gl);
-        checkTexture(gl, texture); // Check texture state
         logDebug('WebGL texture created');
-
-        // Debug: Draw texture to a visible canvas
-        const debugCanvas = document.createElement('canvas');
-        debugCanvas.style.position = 'fixed';
-        debugCanvas.style.bottom = '0';
-        debugCanvas.style.right = '0';
-        debugCanvas.style.zIndex = '10000';
-        debugCanvas.width = 200;
-        debugCanvas.height = 200;
-        document.body.appendChild(debugCanvas);
-        const debugCtx = debugCanvas.getContext('2d');
-        debugCtx.fillStyle = '#FF6B6B';
-        debugCtx.fillRect(0, 0, 200, 200);
-        debugCtx.fillStyle = '#FFFFFF';
-        debugCtx.font = '24px Arial';
-        debugCtx.textAlign = 'center';
-        debugCtx.fillText('Loading...', 100, 100);
 
         // Load PNG image
         const img = new Image();
-        img.crossOrigin = "anonymous";
+        img.crossOrigin = "anonymous"; // Enable CORS if needed
         img.onload = function() {
           logDebug('Image loaded successfully');
           const aspect = img.width / img.height;
@@ -271,18 +183,13 @@
           const y = (canvas.height - drawHeight) / 2;
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, x, y, drawWidth, drawHeight);
-
+          
           gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
           gl.generateMipmap(gl.TEXTURE_2D);
           checkGLErrors(gl);
-          checkTexture(gl, texture); // Check texture state after update
           logDebug('Texture updated with loaded image');
-
-          // Update debug canvas
-          debugCtx.drawImage(img, 0, 0, 200, 200);
-          logDebug('Debug canvas updated with loaded image');
         };
         img.onerror = function() {
           logDebug('Image failed to load');
@@ -297,28 +204,22 @@
           gl.bindTexture(gl.TEXTURE_2D, texture);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
           checkGLErrors(gl);
-          debugCtx.fillStyle = '#FF0000';
-          debugCtx.fillRect(0, 0, 200, 200);
-          debugCtx.fillStyle = '#FFFFFF';
-          debugCtx.font = '24px Arial';
-          debugCtx.fillText('Error', 100, 100);
-          logDebug('Debug canvas updated with error state');
         };
         img.src = imageUrl;
 
         // Define plane geometry (0.5m x 0.5m, centered)
         const vertices = new Float32Array([
-          -0.25, -0.25, 0.0,
-           0.25, -0.25, 0.0,
-           0.25,  0.25, 0.0,
-          -0.25,  0.25, 0.0,
+          -0.25, -0.25, 0.0, // bottom-left
+           0.25, -0.25, 0.0, // bottom-right
+           0.25,  0.25, 0.0, // top-right
+          -0.25,  0.25, 0.0, // top-left
         ]);
 
         const texCoords = new Float32Array([
-          0.0, 1.0,
-          1.0, 1.0,
-          1.0, 0.0,
-          0.0, 0.0,
+          0.0, 1.0, // bottom-left
+          1.0, 1.0, // bottom-right
+          1.0, 0.0, // top-right
+          0.0, 0.0, // top-left
         ]);
 
         const indices = new Uint16Array([
@@ -350,6 +251,7 @@
           }
         `;
 
+        // Create material
         const sampler = new Sampler({
           minFilter: gl.LINEAR,
           magFilter: gl.LINEAR,
@@ -360,6 +262,7 @@
         const material = new Material('TexturedPlane', vertexShader, fragmentShader);
         material.addSampler('uTexture', textureObj);
 
+        // Set material state
         material.state = {
           blend: true,
           blendFuncSrc: gl.SRC_ALPHA,
@@ -369,6 +272,7 @@
           cullFace: false
         };
 
+        // Create mesh and render primitive
         const mesh = renderer.createSimpleMesh({}, {
           positions: vertices,
           texCoords: texCoords,
@@ -381,21 +285,13 @@
         return planeNode;
       }
 
-      // Test image loading separately
-      function testImageLoading() {
-        const testImg = new Image();
-        testImg.crossOrigin = "anonymous";
-        testImg.onload = () => logDebug('Test image loaded successfully');
-        testImg.onerror = () => logDebug('Test image failed to load');
-        testImg.src = 'media/images/wallart.png';
-      }
-
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
       scene.addNode(reticle);
 
       scene.clear = false;
 
+      // Poster management
       let currentPoster = null;
       let baseMatrix = mat4.create();
       let controls = {
@@ -408,6 +304,7 @@
         rotZ: 0,
       };
 
+      // Touch control variables
       let isDragging = false;
       let isPinching = false;
       let lastTouchX = 0;
@@ -425,13 +322,16 @@
         mat4.getTranslation(position, matrix);
         mat4.getRotation(rotation, matrix);
 
+        // Apply position offsets
         let offset = vec3.fromValues(controls.posX, controls.posY, controls.posZ);
         vec3.add(position, position, offset);
 
+        // Apply user rotations
         let userRotation = quat.create();
         quat.fromEuler(userRotation, controls.rotX, controls.rotY, controls.rotZ);
         quat.multiply(rotation, rotation, userRotation);
 
+        // Apply scale
         let scaleMatrix = mat4.create();
         mat4.fromScaling(scaleMatrix, [controls.scale, controls.scale, controls.scale]);
         let transformMatrix = mat4.create();
@@ -440,10 +340,12 @@
 
         currentPoster.matrix = transformMatrix;
 
+        // Log matrix for debugging
         let worldPos = vec3.create();
         mat4.getTranslation(worldPos, transformMatrix);
         logDebug(`Poster transform updated: pos=[${worldPos[0].toFixed(3)}, ${worldPos[1].toFixed(3)}, ${worldPos[2].toFixed(3)}], scale=${controls.scale}`);
 
+        // Update sliders
         document.getElementById('scale').value = controls.scale;
         document.getElementById('posX').value = controls.posX;
         document.getElementById('posY').value = controls.posY;
@@ -630,9 +532,6 @@
             isPinching = false;
           });
         }
-
-        // Run image loading test on initialization
-        testImageLoading();
       }
 
       function onRequestSession() {
@@ -763,35 +662,23 @@
         mat4.fromRotationTranslation(finalMatrix, rotation, position);
         mat4.multiply(finalMatrix, finalMatrix, mat4.fromQuat(mat4.create(), alignRotation));
 
-        // First try with debug plane (red)
-        const debugPlane = createDebugPlaneNode([1, 0, 0, 1]);
-        debugPlane.matrix = finalMatrix;
-        scene.addNode(debugPlane);
-        logDebug('Debug plane added to scene');
+        // Create new poster node
+        const newPoster = new Node();
+        newPoster.name = 'Poster';
+        newPoster.visible = true;
+        const newWallArt = createImagePlaneNode('media/images/wallart.png');
+        newWallArt.visible = true;
+        newPoster.addNode(newWallArt);
+        currentPoster = newPoster;
+        baseMatrix = mat4.clone(finalMatrix);
 
-        // After 3 seconds, replace with the actual image
-        setTimeout(() => {
-          scene.removeNode(debugPlane);
-          logDebug('Debug plane removed');
+        updatePosterTransform();
+        scene.addNode(newPoster);
 
-          const newPoster = new Node();
-          newPoster.name = 'Poster';
-          newPoster.visible = true;
-          const newWallArt = createImagePlaneNode('media/images/wallart.png');
-          newWallArt.visible = true;
-          newPoster.addNode(newWallArt);
-          newPoster.matrix = finalMatrix;
-          currentPoster = newPoster;
-          baseMatrix = mat4.clone(finalMatrix);
-
-          updatePosterTransform();
-          scene.addNode(newPoster);
-
-          logDebug(`Poster node added with ${newPoster.children.length} children, ${newWallArt.renderPrimitives.length} primitives`);
-          logDebug('Poster placed successfully');
-          document.getElementById('controls').style.display = 'block';
-          document.getElementById('guidance').style.display = 'none';
-        }, 3000);
+        logDebug(`Poster node added with ${newPoster.children.length} children, ${newWallArt.renderPrimitives.length} primitives`);
+        logDebug('Poster placed successfully');
+        document.getElementById('controls').style.display = 'block';
+        document.getElementById('guidance').style.display = 'none';
       }
 
       function onSelect(event) {
@@ -839,13 +726,6 @@
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(gl.LEQUAL);
-
-        // Debug rendering state
-        logDebug(`Rendering frame with poster: ${currentPoster ? 'Yes' : 'No'}`);
-        if (currentPoster) {
-          logDebug(`Poster visibility: ${currentPoster.visible}`);
-          logDebug(`Poster matrix: ${currentPoster.matrix}`);
-        }
 
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
