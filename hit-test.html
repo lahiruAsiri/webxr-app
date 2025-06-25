@@ -66,6 +66,21 @@
         border: none;
         cursor: pointer;
       }
+      #copyConsoleButton {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        padding: 5px 10px;
+        background: #4b5563;
+        color: white;
+        border-radius: 3px;
+        border: none;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      #copyConsoleButton:hover {
+        background: #6b7280;
+      }
     </style>
     <title>Hit Test AR</title>
   </head>
@@ -118,35 +133,47 @@
             <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
             <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
-          <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
+          <button id="removePoster" class="removePoster()" class="w-full mt-4 bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 focus:outline-none">
             Remove Poster
           </button>
         </div>
       </div>
     </div>
-    <div id="debugConsole"></div>
+    <div id="debugConsole">
+      <button id="copyConsoleButton">Copy Console</button>
+    </div>
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
       import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
       import {Node} from './js/render/core/node.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
-      import {MeshNode} from './js/render/nodes/mesh.js';
-      import {Mesh} from './js/render/core/mesh.js';
+    import {MeshNode} from './js/render/nodes/meshNode.js';
+    import {Mesh} from './js/render/core/mesh.js';
       import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
       import {Ray} from './js/render/math/ray.js';
 
-      // Override console.log to append to debug console
+      // Override console.log
       const originalConsoleLog = console.log;
-      console.log = function(...args) {
+      console.log = function (...args) {
         const debugConsole = document.getElementById('debugConsole');
-        const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' ');
+        const message = args.map((arg => typeof arg === 'object' ? JSON.stringify(arg) : arg)).join(' ');
         const p = document.createElement('p');
         p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
         debugConsole.appendChild(p);
         debugConsole.scrollTop = debugConsole.scrollHeight;
         originalConsoleLog.apply(console, args);
       };
+
+      // Setup copy console button
+      document.getElementById('copyConsoleButton').addEventListener('click', () => {
+        const messages = Array.from(document.querySelectorAll('#debugConsole p')).map(p => p.textContent).join('\n');
+        navigator.clipboard.writeText(messages).then(() => {
+          console.log('Console messages copied to clipboard');
+        }).catch((error) => {
+          console.error('Failed to copy console messages:', error);
+        });
+      });
 
       // XR globals
       let xrButton = null;
@@ -658,7 +685,6 @@
 
         console.log('Surface detected:', { surfaceType, upVector });
 
-        // Simplify placement for testing
         let modelZ = vec3.fromValues(0, 0, -1);
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
