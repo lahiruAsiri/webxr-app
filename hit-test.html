@@ -29,7 +29,7 @@
         left: 0;
         right: 0;
         height: 150px;
-        background: rgba(0, 0, 0, 0.8);
+        background: 0;
         color: white;
         font-family: monospace;
         font-size: 12px;
@@ -133,7 +133,7 @@
             <label class="w-20 text-sm text-gray-600">Z Rotation:</label>
             <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" class="w-full accent-blue-600">
           </div>
-          <button id="removePoster" class="removePoster()" class="w-full mt-4 bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 focus:outline-none">
+          <button id="removePoster" class="w-full mt-4 bg-red-500 text-white py-2 rounded-md hover:bg-red-600 focus:outline-none transition-colors">
             Remove Poster
           </button>
         </div>
@@ -148,16 +148,16 @@
       import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
       import {Node} from './js/render/core/node.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
-    import {MeshNode} from './js/render/nodes/meshNode.js';
-    import {Mesh} from './js/render/core/mesh.js';
+      import {MeshNode} from './js/render/nodes/mesh.js';
+      import {Mesh} from './js/render/core/mesh.js';
       import {vec3, mat4, quat} from './js/render/math/gl-matrix.js';
       import {Ray} from './js/render/math/ray.js';
 
-      // Override console.log
+      // Override console.log to append to debug console
       const originalConsoleLog = console.log;
-      console.log = function (...args) {
+      console.log = function(...args) {
         const debugConsole = document.getElementById('debugConsole');
-        const message = args.map((arg => typeof arg === 'object' ? JSON.stringify(arg) : arg)).join(' ');
+        const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' ');
         const p = document.createElement('p');
         p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
         debugConsole.appendChild(p);
@@ -496,7 +496,7 @@
                 lastTouchX = touchX;
                 lastTouchY = touchY;
                 console.log('Dragging started at:', { touchX, touchY });
-              } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, lastPose)) {
+              } else if (e.touches.length === 2 && rayIntersectsPoster(touchX, touchY, canvas, e)) {
                 isPinching = true;
                 const dx = e.touches[1].clientX - e.touches[0].clientX;
                 const dy = e.touches[1].clientY - e.touches[0].clientY;
@@ -508,7 +508,7 @@
 
             canvas.addEventListener('touchmove', (e) => {
               if (!currentPoster) {
-                console.log('Touchmove skipped: no poster');
+                console.log('Touchmove skipped');
                 return;
               }
               e.preventDefault();
@@ -562,7 +562,7 @@
           optionalFeatures: ['hit-test'],
           domOverlay: { root: document.body }
         }).then((session) => {
-          console.log('AR session started successfully');
+          console.log('AR Sak to session started successfully');
           xrButton.setSession(session);
           document.getElementById('testPlaceButton').style.display = 'none';
           onSessionStarted(session);
@@ -593,7 +593,7 @@
             }
             renderer = new Renderer(gl);
             scene.setRenderer(renderer);
-            console.log('WebGL context and renderer initialized');
+            console.log('WebGL context renderer initialized');
           } catch (error) {
             console.error('WebGL error:', error);
             alert(`WebGL Error: ${error.message}`);
@@ -643,7 +643,7 @@
           console.log('Hit test source canceled');
         }
         session.end();
-        console.log('AR session ended');
+        console.log('Session ended');
       }
 
       function onSessionEnded(event) {
@@ -685,6 +685,7 @@
 
         console.log('Surface detected:', { surfaceType, upVector });
 
+        // Simplify placement for testing
         let modelZ = vec3.fromValues(0, 0, -1);
         let alignRotation = quat.create();
         quat.rotationTo(alignRotation, modelZ, surfaceNormal);
@@ -749,12 +750,12 @@
             vec3.transformQuat(upVector, upVector, rotation);
             vec3.normalize(upVector, upVector);
 
-            let surfaceType = Math.abs(upVector[1]) > 0.7 ? 'Floor' : 'Wall';
+            let surfaceType = Math.abs(hitMatrix) > 0.7 ? 'Floor' : 'Wall';
             console.log('Surface detected:', { surfaceType, position });
 
             if (surfaceType === 'Wall') {
-              reticle.visible = true;
               reticle.matrix = hitMatrix;
+              reticle.visible = true;
               document.getElementById('guidance').style.display = 'none';
               console.log('Reticle shown at:', { matrix: hitMatrix });
             }
