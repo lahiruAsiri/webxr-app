@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AR Wall Art Viewer</title>
+    
+    <!-- A-Frame and AR.js -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar-nft.js"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .control-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .control-btn:hover {
+            background: #0056b3;
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: white;
+            font-size: 12px;
+        }
+        
+        .slider {
+            width: 80px;
+        }
+        
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 2000;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <p>Loading AR... Please allow camera access</p>
+    </div>
+
+    <!-- AR Scene -->
+    <a-scene
+        embedded
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        vr-mode-ui="enabled: false"
+        renderer="logarithmicDepthBuffer: true;"
+        loading-screen="enabled: false">
+        
+        <!-- Assets -->
+        <a-assets>
+            <img id="wallart" src="/wallart.png?height=400&width=300" crossorigin="anonymous">
+        </a-assets>
+        
+        <!-- Marker -->
+        <a-marker
+            id="marker"
+            preset="hiro"
+            raycaster="objects: .clickable"
+            emitevents="true"
+            cursor="fuse: false; rayOrigin: mouse;">
+            
+            <!-- 3D Poster Frame -->
+            <a-box
+                id="frame"
+                position="0 0 0"
+                width="0.1"
+                height="3"
+                depth="2"
+                color="#8B4513"
+                class="clickable">
+            </a-box>
+            
+            <!-- Wall Art Plane -->
+            <a-plane
+                id="wallart-plane"
+                position="0 0 0.05"
+                width="2.8"
+                height="2.8"
+                src="#wallart"
+                class="clickable"
+                animation__mouseenter="property: scale; to: 1.1 1.1 1.1; startEvents: mouseenter; dur: 300"
+                animation__mouseleave="property: scale; to: 1 1 1; startEvents: mouseleave; dur: 300">
+            </a-plane>
+            
+            <!-- Shadow -->
+            <a-plane
+                position="0 -0.1 -0.1"
+                width="3"
+                height="3"
+                rotation="-90 0 0"
+                color="#000000"
+                opacity="0.3">
+            </a-plane>
+        </a-marker>
+        
+        <!-- Camera -->
+        <a-entity camera></a-entity>
+    </a-scene>
+
+    <!-- Controls -->
+    <div class="controls">
+        <div class="slider-container">
+            <label>Size:</label>
+            <input type="range" id="sizeSlider" class="slider" min="0.5" max="3" step="0.1" value="1">
+        </div>
+        
+        <div class="slider-container">
+            <label>Rotate X:</label>
+            <input type="range" id="rotateXSlider" class="slider" min="-180" max="180" step="5" value="0">
+        </div>
+        
+        <div class="slider-container">
+            <label>Rotate Y:</label>
+            <input type="range" id="rotateYSlider" class="slider" min="-180" max="180" step="5" value="0">
+        </div>
+        
+        <div class="slider-container">
+            <label>Rotate Z:</label>
+            <input type="range" id="rotateZSlider" class="slider" min="-180" max="180" step="5" value="0">
+        </div>
+        
+        <button class="control-btn" id="resetBtn">Reset</button>
+        <button class="control-btn" id="uploadBtn">Upload Art</button>
+    </div>
+    
+    <!-- Hidden file input -->
+    <input type="file" id="fileInput" accept="image/*" style="display: none;">
+
+    <script src="script.js"></script>
+</body>
+</html>
