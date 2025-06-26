@@ -28,7 +28,7 @@ function init() {
   scene.add(controller);
 
   const geometry = new THREE.PlaneGeometry(1, 0.7); // size of your PNG in meters
-  const texture = new THREE.TextureLoader().load('wallart.png');
+  const texture = new THREE.TextureLoader().load('media/images/wallart.png');
   const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
   imagePlane = new THREE.Mesh(geometry, material);
   imagePlane.visible = false;
