@@ -1,171 +1,340 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>AR Wall Art Viewer</title>
-    
-    <!-- A-Frame and AR.js -->
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar-nft.js"></script>
-    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Wall Art Viewer - Three.js</title>
     <style>
-        body {
+        * {
             margin: 0;
-            font-family: Arial, sans-serif;
+            padding: 0;
+            box-sizing: border-box;
         }
-        
-        .controls {
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #000;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .controls-panel {
             position: fixed;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 1000;
-            background: rgba(0,0,0,0.8);
-            padding: 15px;
-            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 15px;
+            padding: 20px;
             display: flex;
+            flex-direction: column;
+            gap: 15px;
+            pointer-events: all;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 90vw;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
             gap: 10px;
             flex-wrap: wrap;
             justify-content: center;
         }
-        
-        .control-btn {
-            background: #007bff;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        
-        .control-btn:hover {
-            background: #0056b3;
-        }
-        
-        .slider-container {
+
+        .control-group {
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 12px;
+            border-radius: 8px;
+            min-width: 120px;
+        }
+
+        .control-label {
             color: white;
             font-size: 12px;
+            font-weight: bold;
+            min-width: 40px;
         }
-        
-        .slider {
-            width: 80px;
+
+        .control-slider {
+            flex: 1;
+            min-width: 80px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            outline: none;
         }
-        
-        #loading {
+
+        .control-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #007bff;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .control-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #007bff;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        .control-value {
+            color: #007bff;
+            font-size: 11px;
+            font-weight: bold;
+            min-width: 30px;
+            text-align: right;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d, #495057);
+            box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545, #c82333);
+            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
+        }
+
+        .status-panel {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            pointer-events: all;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+
+        .status-text {
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .status-subtext {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #007bff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .ar-instructions {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.8);
+            background: rgba(0, 0, 0, 0.9);
             color: white;
-            padding: 20px;
-            border-radius: 10px;
-            z-index: 2000;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 80vw;
+            pointer-events: all;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        
-        .hidden {
-            display: none;
+
+        .ar-instructions h3 {
+            margin-bottom: 15px;
+            color: #007bff;
+        }
+
+        .ar-instructions p {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 768px) {
+            .controls-panel {
+                bottom: 10px;
+                padding: 15px;
+            }
+            
+            .control-group {
+                min-width: 100px;
+            }
+            
+            .btn {
+                padding: 10px 15px;
+                font-size: 12px;
+            }
         }
     </style>
 </head>
 <body>
-    <div id="loading">
-        <p>Loading AR... Please allow camera access</p>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        
+        <div class="ui-overlay">
+            <!-- Status Panel -->
+            <div id="statusPanel" class="status-panel">
+                <div class="status-text">
+                    <span class="loading-spinner"></span>
+                    Initializing AR...
+                </div>
+                <div class="status-subtext">Please allow camera access</div>
+            </div>
+
+            <!-- AR Instructions -->
+            <div id="arInstructions" class="ar-instructions hidden">
+                <h3>🎯 AR Instructions</h3>
+                <p>1. Point your camera at a flat surface (wall, table, floor)</p>
+                <p>2. Move your device slowly to help detect the surface</p>
+                <p>3. Tap on the detected surface to place your wall art</p>
+                <p>4. Use controls below to adjust size and rotation</p>
+                <button class="btn" onclick="hideInstructions()">Got it!</button>
+            </div>
+
+            <!-- Controls Panel -->
+            <div id="controlsPanel" class="controls-panel hidden">
+                <!-- Size and Position Controls -->
+                <div class="control-row">
+                    <div class="control-group">
+                        <span class="control-label">Size</span>
+                        <input type="range" id="sizeSlider" class="control-slider" 
+                               min="0.1" max="2.0" step="0.1" value="0.5">
+                        <span id="sizeValue" class="control-value">0.5</span>
+                    </div>
+                    <div class="control-group">
+                        <span class="control-label">Height</span>
+                        <input type="range" id="heightSlider" class="control-slider" 
+                               min="-1" max="2" step="0.1" value="0">
+                        <span id="heightValue" class="control-value">0.0</span>
+                    </div>
+                </div>
+
+                <!-- Rotation Controls -->
+                <div class="control-row">
+                    <div class="control-group">
+                        <span class="control-label">Rot X</span>
+                        <input type="range" id="rotationXSlider" class="control-slider" 
+                               min="-180" max="180" step="5" value="0">
+                        <span id="rotationXValue" class="control-value">0°</span>
+                    </div>
+                    <div class="control-group">
+                        <span class="control-label">Rot Y</span>
+                        <input type="range" id="rotationYSlider" class="control-slider" 
+                               min="-180" max="180" step="5" value="0">
+                        <span id="rotationYValue" class="control-value">0°</span>
+                    </div>
+                    <div class="control-group">
+                        <span class="control-label">Rot Z</span>
+                        <input type="range" id="rotationZSlider" class="control-slider" 
+                               min="-180" max="180" step="5" value="0">
+                        <span id="rotationZValue" class="control-value">0°</span>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="action-buttons">
+                    <button id="uploadBtn" class="btn">📁 Upload Art</button>
+                    <button id="resetBtn" class="btn btn-secondary">🔄 Reset</button>
+                    <button id="deleteBtn" class="btn btn-danger">🗑️ Remove</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden file input -->
+        <input type="file" id="fileInput" accept="image/*">
     </div>
 
-    <!-- AR Scene -->
-    <a-scene
-        embedded
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-        vr-mode-ui="enabled: false"
-        renderer="logarithmicDepthBuffer: true;"
-        loading-screen="enabled: false">
-        
-        <!-- Assets -->
-        <a-assets>
-            <img id="wallart" src="/wallart.png" crossorigin="anonymous">
-        </a-assets>
-        
-        <!-- Marker -->
-        <a-marker
-            id="marker"
-            preset="hiro"
-            raycaster="objects: .clickable"
-            emitevents="true"
-            cursor="fuse: false; rayOrigin: mouse;">
-            
-            <!-- 3D Poster Frame -->
-            <a-box
-                id="frame"
-                position="0 0 0"
-                width="0.1"
-                height="3"
-                depth="2"
-                color="#8B4513"
-                class="clickable">
-            </a-box>
-            
-            <!-- Wall Art Plane -->
-            <a-plane
-                id="wallart-plane"
-                position="0 0 0.05"
-                width="2.8"
-                height="2.8"
-                src="#wallart"
-                class="clickable"
-                animation__mouseenter="property: scale; to: 1.1 1.1 1.1; startEvents: mouseenter; dur: 300"
-                animation__mouseleave="property: scale; to: 1 1 1; startEvents: mouseleave; dur: 300">
-            </a-plane>
-            
-            <!-- Shadow -->
-            <a-plane
-                position="0 -0.1 -0.1"
-                width="3"
-                height="3"
-                rotation="-90 0 0"
-                color="#000000"
-                opacity="0.3">
-            </a-plane>
-        </a-marker>
-        
-        <!-- Camera -->
-        <a-entity camera></a-entity>
-    </a-scene>
-
-    <!-- Controls -->
-    <div class="controls">
-        <div class="slider-container">
-            <label>Size:</label>
-            <input type="range" id="sizeSlider" class="slider" min="0.5" max="3" step="0.1" value="1">
-        </div>
-        
-        <div class="slider-container">
-            <label>Rotate X:</label>
-            <input type="range" id="rotateXSlider" class="slider" min="-180" max="180" step="5" value="0">
-        </div>
-        
-        <div class="slider-container">
-            <label>Rotate Y:</label>
-            <input type="range" id="rotateYSlider" class="slider" min="-180" max="180" step="5" value="0">
-        </div>
-        
-        <div class="slider-container">
-            <label>Rotate Z:</label>
-            <input type="range" id="rotateZSlider" class="slider" min="-180" max="180" step="5" value="0">
-        </div>
-        
-        <button class="control-btn" id="resetBtn">Reset</button>
-        <button class="control-btn" id="uploadBtn">Upload Art</button>
-    </div>
-    
-    <!-- Hidden file input -->
-    <input type="file" id="fileInput" accept="image/*" style="display: none;">
-
-    <script src="script.js"></script>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
