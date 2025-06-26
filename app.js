@@ -22,6 +22,7 @@ class ARWallArtViewer {
 
     // State
     this.isARActive = false
+    this.isFallbackMode = false
     this.wallArtPlaced = false
     this.currentTexture = null
 
@@ -38,6 +39,14 @@ class ARWallArtViewer {
     this.touchStart = { x: 0, y: 0 }
     this.isRotating = false
 
+    // Fallback mode controls
+    this.cameraControls = {
+      mouseX: 0,
+      mouseY: 0,
+      targetX: 0,
+      targetY: 0,
+    }
+
     this.init()
   }
 
@@ -49,10 +58,10 @@ class ARWallArtViewer {
       await this.loadDefaultTexture()
       this.setupEventListeners()
       this.setupUI()
-      await this.initializeAR()
+      await this.checkARSupport()
     } catch (error) {
       console.error("Initialization failed:", error)
-      this.updateStatus("AR not supported on this device", "Please use a compatible browser")
+      this.startFallbackMode()
     }
   }
 
@@ -62,6 +71,7 @@ class ARWallArtViewer {
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20)
+    this.camera.position.set(0, 1.6, 3) // Default position for fallback mode
 
     // Renderer
     this.renderer = new THREE.WebGLRenderer({
@@ -137,7 +147,31 @@ class ARWallArtViewer {
           resolve(texture)
         },
         undefined,
-        reject,
+        (error) => {
+          console.warn("Failed to load default texture:", error)
+          // Create a simple colored texture as fallback
+          const canvas = document.createElement("canvas")
+          canvas.width = 512
+          canvas.height = 512
+          const ctx = canvas.getContext("2d")
+
+          // Create a gradient
+          const gradient = ctx.createLinearGradient(0, 0, 512, 512)
+          gradient.addColorStop(0, "#007bff")
+          gradient.addColorStop(1, "#0056b3")
+          ctx.fillStyle = gradient
+          ctx.fillRect(0, 0, 512, 512)
+
+          // Add text
+          ctx.fillStyle = "white"
+          ctx.font = "48px Arial"
+          ctx.textAlign = "center"
+          ctx.fillText("Sample Art", 256, 256)
+
+          const texture = new THREE.CanvasTexture(canvas)
+          this.currentTexture = texture
+          resolve(texture)
+        },
       )
     })
   }
@@ -181,6 +215,11 @@ class ARWallArtViewer {
     this.shadow.position.z = 0.01
     this.wallArtGroup.add(this.shadow)
 
+    // Position for fallback mode
+    if (this.isFallbackMode) {
+      this.wallArtGroup.position.set(0, 1.6, -2)
+    }
+
     // Apply current controls
     this.updateWallArtTransform()
 
@@ -196,7 +235,7 @@ class ARWallArtViewer {
     this.wallArtGroup.scale.set(scale, scale, scale)
 
     // Apply position
-    this.wallArtGroup.position.y = this.controls.height
+    this.wallArtGroup.position.y += this.controls.height
 
     // Apply rotation
     this.wallArtGroup.rotation.x = THREE.MathUtils.degToRad(this.controls.rotationX)
@@ -204,24 +243,36 @@ class ARWallArtViewer {
     this.wallArtGroup.rotation.z = THREE.MathUtils.degToRad(this.controls.rotationZ)
   }
 
-  async initializeAR() {
+  async checkARSupport() {
     if (!navigator.xr) {
-      throw new Error("WebXR not supported")
+      this.showFallbackOption()
+      return
     }
 
-    const supported = await navigator.xr.isSessionSupported("immersive-ar")
-    if (!supported) {
-      throw new Error("AR not supported")
+    try {
+      const supported = await navigator.xr.isSessionSupported("immersive-ar")
+      if (!supported) {
+        this.showFallbackOption()
+        return
+      }
+
+      this.updateStatus("AR Ready!", "Tap to start AR experience")
+
+      // Add click to start AR
+      document.addEventListener("click", this.startAR.bind(this))
+    } catch (error) {
+      console.warn("AR support check failed:", error)
+      this.showFallbackOption()
     }
+  }
 
-    this.updateStatus("AR Ready!", "Tap to start AR experience")
-
-    // Add click to start AR
-    document.addEventListener("click", this.startAR.bind(this))
+  showFallbackOption() {
+    document.getElementById("statusPanel").classList.add("hidden")
+    document.getElementById("fallbackMode").classList.remove("hidden")
   }
 
   async startAR() {
-    if (this.isARActive) return
+    if (this.isARActive || this.isFallbackMode) return
 
     try {
       this.updateStatus("Starting AR...", "Please wait")
@@ -245,8 +296,60 @@ class ARWallArtViewer {
       this.renderer.setAnimationLoop(this.render.bind(this))
     } catch (error) {
       console.error("Failed to start AR:", error)
-      this.updateStatus("AR Failed", "Please try again")
+      this.updateStatus("AR Failed", "Switching to 3D preview mode")
+      setTimeout(() => this.startFallbackMode(), 2000)
     }
+  }
+
+  startFallbackMode() {
+    this.isFallbackMode = true
+    document.getElementById("fallbackMode").classList.add("hidden")
+    document.getElementById("statusPanel").classList.add("hidden")
+
+    // Create wall art immediately in fallback mode
+    this.createWallArt()
+
+    // Show controls
+    document.getElementById("controlsPanel").classList.remove("hidden")
+    document.getElementById("controlsPanel").classList.add("fade-in")
+
+    // Setup fallback camera controls
+    this.setupFallbackControls()
+
+    // Start render loop
+    this.renderer.setAnimationLoop(this.renderFallback.bind(this))
+  }
+
+  setupFallbackControls() {
+    // Mouse/touch controls for camera
+    const canvas = this.renderer.domElement
+
+    const onMouseMove = (event) => {
+      this.cameraControls.mouseX = (event.clientX - window.innerWidth / 2) * 0.001
+      this.cameraControls.mouseY = (event.clientY - window.innerHeight / 2) * 0.001
+    }
+
+    const onTouchMove = (event) => {
+      if (event.touches.length === 1) {
+        this.cameraControls.mouseX = (event.touches[0].clientX - window.innerWidth / 2) * 0.001
+        this.cameraControls.mouseY = (event.touches[0].clientY - window.innerHeight / 2) * 0.001
+      }
+    }
+
+    canvas.addEventListener("mousemove", onMouseMove)
+    canvas.addEventListener("touchmove", onTouchMove)
+  }
+
+  renderFallback() {
+    // Smooth camera movement
+    this.cameraControls.targetX += (this.cameraControls.mouseX - this.cameraControls.targetX) * 0.05
+    this.cameraControls.targetY += (this.cameraControls.mouseY - this.cameraControls.targetY) * 0.05
+
+    this.camera.position.x = this.cameraControls.targetX * 2
+    this.camera.position.y = 1.6 + this.cameraControls.targetY * 2
+    this.camera.lookAt(0, 1.6, -2)
+
+    this.renderer.render(this.scene, this.camera)
   }
 
   onARSessionEnd() {
@@ -414,6 +517,7 @@ class ARWallArtViewer {
   }
 
   onTouch(event) {
+    if (this.isFallbackMode) return // No placement needed in fallback mode
     if (!this.isARActive || this.wallArtPlaced || this.isRotating) return
 
     if (this.reticle.visible) {
@@ -487,10 +591,15 @@ class ARWallArtViewer {
       this.scene.remove(this.wallArtGroup)
       this.wallArtGroup = null
       this.wallArtPlaced = false
-      this.reticle.visible = true
 
-      document.getElementById("controlsPanel").classList.add("hidden")
-      this.updateStatus("Wall Art Removed", "Point at surface to place new art")
+      if (this.isARActive) {
+        this.reticle.visible = true
+        document.getElementById("controlsPanel").classList.add("hidden")
+        this.updateStatus("Wall Art Removed", "Point at surface to place new art")
+      } else if (this.isFallbackMode) {
+        // In fallback mode, recreate immediately
+        setTimeout(() => this.createWallArt(), 100)
+      }
     }
   }
 
@@ -504,8 +613,11 @@ class ARWallArtViewer {
   }
 
   updateStatus(text, subtext = "") {
-    document.querySelector(".status-text").innerHTML = text
-    document.querySelector(".status-subtext").textContent = subtext
+    const statusPanel = document.getElementById("statusPanel")
+    if (!statusPanel.classList.contains("hidden")) {
+      document.querySelector(".status-text").innerHTML = text
+      document.querySelector(".status-subtext").textContent = subtext
+    }
   }
 }
 
@@ -514,15 +626,20 @@ function hideInstructions() {
   document.getElementById("arInstructions").classList.add("hidden")
 }
 
+function startFallbackMode() {
+  if (window.app) {
+    window.app.startFallbackMode()
+  }
+}
+
 // Initialize the app
-let app
 document.addEventListener("DOMContentLoaded", () => {
-  app = new ARWallArtViewer()
+  window.app = new ARWallArtViewer()
 })
 
 // Handle page visibility changes
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && app && app.xrSession) {
-    app.xrSession.end()
+  if (document.hidden && window.app && window.app.xrSession) {
+    window.app.xrSession.end()
   }
 })

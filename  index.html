@@ -89,6 +89,7 @@
             background: rgba(255, 255, 255, 0.3);
             border-radius: 3px;
             outline: none;
+            -webkit-appearance: none;
         }
 
         .control-slider::-webkit-slider-thumb {
@@ -239,6 +240,20 @@
             line-height: 1.5;
         }
 
+        .fallback-mode {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 80vw;
+            pointer-events: all;
+        }
+
         @media (max-width: 768px) {
             .controls-panel {
                 bottom: 10px;
@@ -278,6 +293,14 @@
                 <p>3. Tap on the detected surface to place your wall art</p>
                 <p>4. Use controls below to adjust size and rotation</p>
                 <button class="btn" onclick="hideInstructions()">Got it!</button>
+            </div>
+
+            <!-- Fallback Mode -->
+            <div id="fallbackMode" class="fallback-mode hidden">
+                <h3>⚠️ AR Not Available</h3>
+                <p>WebXR AR is not supported on this device/browser.</p>
+                <p>You can still preview your wall art in 3D mode!</p>
+                <button class="btn" onclick="startFallbackMode()">Start 3D Preview</button>
             </div>
 
             <!-- Controls Panel -->
