@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <!--
 Copyright 2018 The Immersive Web Community Group
 
@@ -28,26 +28,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
     <link rel='stylesheet' href='css/common.css'>
-    <style>
-      /* Temporary styles to ensure button visibility */
-      .xr-button {
-        display: block !important;
-        background-color: #007bff;
-        color: white;
-        padding: 10px 20px;
-        border: none;
-        cursor: pointer;
-        margin-top: 10px;
-      }
-    </style>
-    <title>Hit Test with PNG</title>
+
+    <title>AR Poster Demo</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>Hit Test with PNG</summary>
+        <summary>AR Poster Demo</summary>
         <p>
-          This sample demonstrates the use of hit testing to place a PNG image on real-world surfaces.
+          This sample demonstrates placing PNG posters on real-world surfaces using hit testing.
           <a class="back" href="./">Back</a>
         </p>
       </details>
@@ -59,42 +48,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       import {Node} from './js/render/core/node.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {DropShadowNode} from './js/render/nodes/drop-shadow.js';
-      import {vec3, mat4} from './js/render/math/gl-matrix.js';
-      import {Ray} from './js/render/math/ray.js';
-
-      // Custom function to create a textured plane for the PNG
-      function createTexturedPlane(url) {
-        const geometry = {
-          vertices: new Float32Array([
-            -0.5, -0.5, 0, // Bottom-left
-             0.5, -0.5, 0, // Bottom-right
-             0.5,  0.5, 0, // Top-right
-            -0.5,  0.5, 0  // Top-left
-          ]),
-          indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
-          texcoords: new Float32Array([
-            0, 0, // Bottom-left
-            1, 0, // Bottom-right
-            1, 1, // Top-right
-            0, 1  // Top-left
-          ])
-        };
-
-        const texture = new Image();
-        texture.src = url;
-        texture.crossOrigin = 'anonymous';
-
-        const node = new Node();
-        node.geometry = geometry;
-        node.texture = texture;
-        node.onload = () => {
-          texture.onload = () => {
-            node.texture = texture;
-          };
-        };
-
-        return node;
-      }
+      import {vec3} from './js/render/math/gl-matrix.js';
 
       // XR globals.
       let xrButton = null;
@@ -108,27 +62,69 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       let scene = new Scene();
       scene.enableStats(false);
 
+      // Create a base node for our AR content
       let arObject = new Node();
       arObject.visible = false;
       scene.addNode(arObject);
 
-      // Replace sunflower GLTF with PNG textured plane
-      let imagePlane = createTexturedPlane('media/images/wallart.png'); // Replace with your PNG path
-      arObject.addNode(imagePlane);
+      // Create a textured quad for our poster
+      function createPosterNode(imageUrl) {
+        const posterNode = new Node();
+        
+        // Create plane geometry (1 unit wide and tall)
+        const vertices = new Float32Array([
+          -0.5, -0.5, 0,  // bottom left
+           0.5, -0.5, 0,  // bottom right
+           0.5,  0.5, 0,  // top right
+          -0.5,  0.5, 0   // top left
+        ]);
+        
+        const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
+        
+        const texCoords = new Float32Array([
+          0, 1,  // bottom left
+          1, 1,  // bottom right
+          1, 0,  // top right
+          0, 0   // top left
+        ]);
+        
+        // Create material
+        const material = {
+          baseColorTexture: { uri: imageUrl },
+          baseColorFactor: [1, 1, 1, 1],
+          doubleSided: true
+        };
+        
+        // Add render primitive to the node
+        posterNode.addRenderPrimitive({
+          vertices: vertices,
+          indices: indices,
+          texCoords: texCoords,
+          material: material
+        });
+        
+        // Scale to appropriate size (1 meter wide, height based on image aspect ratio)
+        return posterNode;
+      }
 
+      // Create a sample poster (replace with your image path)
+      let poster = createPosterNode('media/images/wallart.png');
+      arObject.addNode(poster);
+
+      // Reticle for placement
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
       scene.addNode(reticle);
 
-      // Drop shadow for grounding the object
+      // Drop shadow
       let shadow = new DropShadowNode();
-      vec3.set(shadow.scale, 0.15, 0.15, 0.15);
+      vec3.set(shadow.scale, 0.5, 0.5, 0.5); // Adjusted for poster size
       arObject.addNode(shadow);
 
-      const MAX_OBJECTS = 30;
-      let objects = [];
+      const MAX_POSTERS = 30;
+      let posters = [];
 
-      // Ensure the background is transparent for AR.
+      // Ensure the background is transparent for AR
       scene.clear = false;
 
       function initXR() {
@@ -139,34 +135,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           textXRNotFoundTitle: "AR NOT FOUND",
           textExitXRTitle: "EXIT AR",
         });
-        console.log('xrButton.domElement:', xrButton.domElement); // Debug
-        if (!xrButton.domElement) {
-          console.warn('WebXRButton.domElement is null, creating fallback button');
-          xrButton.domElement = document.createElement('button');
-          xrButton.domElement.textContent = "START AR";
-          xrButton.domElement.className = 'xr-button';
-          xrButton.domElement.onclick = onRequestSession;
-        }
         document.querySelector('header').appendChild(xrButton.domElement);
 
         if (navigator.xr) {
           navigator.xr.isSessionSupported('immersive-ar')
                       .then((supported) => {
-            console.log('AR supported:', supported); // Debug
             xrButton.enabled = supported;
-            if (!supported) {
-              xrButton.domElement.textContent = "AR NOT SUPPORTED";
-              xrButton.domElement.disabled = true;
-            }
-          }).catch((error) => {
-            console.error('isSessionSupported error:', error);
-            xrButton.domElement.textContent = "AR ERROR";
-            xrButton.domElement.disabled = true;
           });
-        } else {
-          console.warn('navigator.xr not available');
-          xrButton.domElement.textContent = "WEBXR NOT AVAILABLE";
-          xrButton.domElement.disabled = true;
         }
       }
 
@@ -175,9 +150,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
                            .then((session) => {
           xrButton.setSession(session);
           onSessionStarted(session);
-        }).catch((error) => {
-          console.error('requestSession error:', error);
-          xrButton.domElement.textContent = "AR SESSION FAILED";
         });
       }
 
@@ -187,38 +159,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         if (!gl) {
           gl = createWebGLContext({
-            xrCompatible: true,
-            alpha: true
+            xrCompatible: true
           });
 
           renderer = new Renderer(gl);
-
-          renderer.addShader({
-            vertexShader: `
-              attribute vec3 a_position;
-              attribute vec2 a_texcoord;
-              uniform mat4 u_matrix;
-              varying vec2 v_texcoord;
-              void main() {
-                gl_Position = u_matrix * vec4(a_position, 1.0);
-                v_texcoord = a_texcoord;
-              }
-            `,
-            fragmentShader: `
-              precision mediump float;
-              varying vec2 v_texcoord;
-              uniform sampler2D u_texture;
-              void main() {
-                gl_FragColor = texture2D(u_texture, v_texcoord);
-              }
-            `
-          });
-
           scene.setRenderer(renderer);
         }
 
         session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
 
+        // Set up hit testing
         session.requestReferenceSpace('viewer').then((refSpace) => {
           xrViewerSpace = refSpace;
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
@@ -233,8 +183,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       }
 
       function onEndSession(session) {
-        xrHitTestSource.cancel();
-        xrHitTestSource = null;
+        if (xrHitTestSource) {
+          xrHitTestSource.cancel();
+          xrHitTestSource = null;
+        }
         session.end();
       }
 
@@ -243,21 +195,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       }
 
       function addARObjectAt(matrix) {
-        let newObject = arObject.clone();
-        newObject.visible = true;
-        newObject.matrix = matrix;
-        scene.addNode(newObject);
+        let newPoster = arObject.clone();
+        newPoster.visible = true;
+        newPoster.matrix = matrix;
+        scene.addNode(newPoster);
 
-        objects.push(newObject);
+        posters.push(newPoster);
 
-        if (objects.length > MAX_OBJECTS) {
-          let oldObject = objects.shift();
-          scene.removeNode(oldObject);
+        // Limit the number of posters for performance
+        if (posters.length > MAX_POSTERS) {
+          let oldPoster = posters.shift();
+          scene.removeNode(oldPoster);
         }
       }
-
-      let rayOrigin = vec3.create();
-      let rayDirection = vec3.create(); // Fixed typo: 'does' to 'let'
 
       function onSelect(event) {
         if (reticle.visible) {
@@ -271,32 +221,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         reticle.visible = false;
 
+        // Update hit test results
         if (xrHitTestSource && pose) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
             let pose = hitTestResults[0].getPose(xrRefSpace);
             reticle.visible = true;
             reticle.matrix = pose.transform.matrix;
-
-            let viewerPos = vec3.fromValues(pose.transform.position.x, pose.transform.position.y, pose.transform.position.z);
-            let targetPos = vec3.fromValues(pose.transform.matrix[12], pose.transform.matrix[13], pose.transform.matrix[14]);
-            let direction = vec3.create();
-            vec3.subtract(direction, viewerPos, targetPos);
-            vec3.normalize(direction, direction);
-            let up = vec3.fromValues(0, 1, 0);
-            let right = vec3.create();
-            vec3.cross(right, direction, up);
-            vec3.normalize(right, right);
-            let newUp = vec3.create();
-            vec3.cross(newUp, right, direction);
-            let matrix = mat4.create();
-            mat4.fromRotationTranslation(matrix, mat4.fromValues(
-              right[0], right[1], right[2], 0,
-              newUp[0], newUp[1], newUp[2], 0,
-              -direction[0], -direction[1], -direction[2], 0,
-              0, 0, 0, 1
-            ), targetPos);
-            imagePlane.matrix = matrix;
           }
         }
 
@@ -306,12 +237,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         scene.endFrame();
       }
 
-      // Start the XR application with error handling
-      try {
-        initXR();
-      } catch (error) {
-        console.error('initXR failed:', error);
-      }
+      // Start the XR application
+      initXR();
     </script>
   </body>
 </html>
