@@ -1,14 +1,11 @@
 import * as THREE from 'https://cdn.skypack.dev/three@0.150.0';
 import { ARButton } from 'https://cdn.skypack.dev/three@0.150.0/examples/jsm/webxr/ARButton.js';
 
-let camera, scene, renderer;
-let controller;
-let reticle;
-let imagePlane;
-const log = (msg) => document.getElementById("log").innerText = msg;
+let camera, scene, renderer, controller, reticle, imagePlane;
+
+const log = msg => document.getElementById("log").innerText = msg;
 
 init();
-animate();
 
 function init() {
   scene = new THREE.Scene();
@@ -20,98 +17,92 @@ function init() {
   document.body.appendChild(renderer.domElement);
   document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
 
-  const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-  scene.add(light);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
 
-  const controller = renderer.xr.getController(0);
+  controller = renderer.xr.getController(0);
   controller.addEventListener('select', onSelect);
   scene.add(controller);
 
-  const geometry = new THREE.PlaneGeometry(1, 0.7); // size of your PNG in meters
-  const texture = new THREE.TextureLoader().load('media/images/wallart.png');
+  const geometry = new THREE.PlaneGeometry(1, 0.7); // 1m x 0.7m poster
+  const texture = new THREE.TextureLoader().load('wallart.png');
   const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
   imagePlane = new THREE.Mesh(geometry, material);
   imagePlane.visible = false;
   scene.add(imagePlane);
 
-  const reticleGeometry = new THREE.RingGeometry(0.05, 0.06, 32).rotateX(-Math.PI / 2);
-  const reticleMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-  reticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
+  const reticleGeo = new THREE.RingGeometry(0.05, 0.06, 32).rotateX(-Math.PI / 2);
+  const reticleMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+  reticle = new THREE.Mesh(reticleGeo, reticleMat);
+  reticle.matrixAutoUpdate = false;
   reticle.visible = false;
   scene.add(reticle);
 
-  const session = renderer.xr.getSession();
-  session.addEventListener('selectstart', () => log("Tap detected"));
+  let hitTestSource = null;
+  let viewerSpace = null;
 
-  // Hit test
-  session.requestReferenceSpace('viewer').then((refSpace) => {
-    session.requestHitTestSource({ space: refSpace }).then((source) => {
-      renderer.setAnimationLoop((timestamp, frame) => {
-        if (frame) {
-          const refSpace = renderer.xr.getReferenceSpace();
-          const hitTestResults = frame.getHitTestResults(source);
-          if (hitTestResults.length > 0) {
-            const hit = hitTestResults[0];
-            const pose = hit.getPose(refSpace);
-            reticle.visible = true;
-            reticle.position.set(pose.transform.position.x, pose.transform.position.y, pose.transform.position.z);
-            reticle.updateMatrixWorld(true);
-          } else {
-            reticle.visible = false;
-          }
-        }
-
-        renderer.render(scene, camera);
-      });
-    });
+  renderer.xr.addEventListener('sessionstart', async () => {
+    const session = renderer.xr.getSession();
+    viewerSpace = await session.requestReferenceSpace('viewer');
+    hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+    log("Move phone to detect a wall surface...");
   });
 
-  window.addEventListener('touchmove', handleTouchMove, false);
-  window.addEventListener('touchstart', handleTouchStart, false);
+  renderer.setAnimationLoop((timestamp, frame) => {
+    if (frame && hitTestSource) {
+      const refSpace = renderer.xr.getReferenceSpace();
+      const hitTestResults = frame.getHitTestResults(hitTestSource);
+      if (hitTestResults.length > 0) {
+        const hit = hitTestResults[0];
+        const pose = hit.getPose(refSpace);
+        reticle.visible = true;
+        reticle.matrix.fromArray(pose.transform.matrix);
+      } else {
+        reticle.visible = false;
+      }
+    }
+    renderer.render(scene, camera);
+  });
+
+  // Touch interaction
+  window.addEventListener('touchmove', handleTouchMove);
+  window.addEventListener('touchstart', handleTouchStart);
 }
 
 function onSelect() {
   if (reticle.visible) {
-    imagePlane.position.copy(reticle.position);
-    imagePlane.quaternion.copy(reticle.quaternion);
+    imagePlane.position.setFromMatrixPosition(reticle.matrix);
+    imagePlane.quaternion.setFromRotationMatrix(reticle.matrix);
     imagePlane.visible = true;
-    log("Image placed!");
+    log("Poster placed. Use pinch & drag to move/scale/rotate.");
   }
 }
 
-let previousDistance = null;
-
-function handleTouchStart(event) {
-  if (event.touches.length === 2) {
-    previousDistance = getDistance(event.touches);
-  }
-}
-
-function handleTouchMove(event) {
-  if (event.touches.length === 2 && imagePlane.visible) {
-    const newDistance = getDistance(event.touches);
-    if (previousDistance) {
-      const scaleFactor = newDistance / previousDistance;
-      imagePlane.scale.multiplyScalar(scaleFactor);
-    }
-    previousDistance = newDistance;
-  } else if (event.touches.length === 1 && imagePlane.visible) {
-    // Drag to move in x-z plane
-    const dx = event.touches[0].movementX || 0;
-    const dz = event.touches[0].movementY || 0;
-    imagePlane.position.x += dx * 0.0005;
-    imagePlane.position.z += dz * 0.0005;
-  }
-}
-
-function getDistance(touches) {
+let startDist = null;
+function getTouchDistance(touches) {
   const dx = touches[0].clientX - touches[1].clientX;
   const dy = touches[0].clientY - touches[1].clientY;
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-function animate() {
-  renderer.setAnimationLoop(() => {
-    renderer.render(scene, camera);
-  });
+function handleTouchStart(event) {
+  if (event.touches.length === 2) {
+    startDist = getTouchDistance(event.touches);
+  }
+}
+
+function handleTouchMove(event) {
+  if (imagePlane.visible) {
+    if (event.touches.length === 2) {
+      const newDist = getTouchDistance(event.touches);
+      if (startDist) {
+        const scale = newDist / startDist;
+        imagePlane.scale.set(scale, scale, scale);
+      }
+    } else if (event.touches.length === 1) {
+      // Drag to move
+      const touch = event.touches[0];
+      imagePlane.position.x += touch.movementX * 0.0005;
+      imagePlane.position.z += touch.movementY * 0.0005;
+    }
+  }
 }
