@@ -1,26 +1,107 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <title>Wall Art AR</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <script type="module" src="js/app.js"></script>
-    <style>
-      body { margin: 0; overflow: hidden; }
-      #log {
-        position: absolute;
-        bottom: 10px;
-        left: 10px;
-        background: rgba(0, 0, 0, 0.6);
-        color: lime;
-        font-size: 14px;
-        padding: 8px;
-        border-radius: 10px;
-        max-width: 90%;
+<head>
+  <meta charset="utf-8">
+  <title>Wall Art AR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@0.150.0';
+    import { ARButton } from 'https://cdn.skypack.dev/three@0.150.0/examples/jsm/webxr/ARButton.js';
+
+    let camera, scene, renderer, controller;
+    let reticle, imagePlane;
+    let hitTestSource = null;
+    let localSpace = null;
+
+    const log = msg => document.getElementById('log').innerText = msg;
+
+    init();
+
+    function init() {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera();
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+
+      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+      scene.add(light);
+
+      controller = renderer.xr.getController(0);
+      controller.addEventListener('select', onSelect);
+      scene.add(controller);
+
+      const geometry = new THREE.PlaneGeometry(1, 0.7); // Adjust for real size
+      const texture = new THREE.TextureLoader().load('wallart.png');
+      const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+      imagePlane = new THREE.Mesh(geometry, material);
+      imagePlane.visible = false;
+      scene.add(imagePlane);
+
+      const ringGeo = new THREE.RingGeometry(0.05, 0.06, 32).rotateX(-Math.PI / 2);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+      reticle = new THREE.Mesh(ringGeo, ringMat);
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      scene.add(reticle);
+
+      renderer.xr.addEventListener('sessionstart', async () => {
+        const session = renderer.xr.getSession();
+        localSpace = await session.requestReferenceSpace('viewer');
+        hitTestSource = await session.requestHitTestSource({ space: localSpace });
+        log("✅ AR session started. Move your device to find a surface.");
+      });
+
+      renderer.setAnimationLoop((timestamp, frame) => {
+        if (frame && hitTestSource) {
+          const refSpace = renderer.xr.getReferenceSpace();
+          const hitTestResults = frame.getHitTestResults(hitTestSource);
+          if (hitTestResults.length > 0) {
+            const hit = hitTestResults[0];
+            const pose = hit.getPose(refSpace);
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+          } else {
+            reticle.visible = false;
+          }
+        }
+
+        renderer.render(scene, camera);
+      });
+    }
+
+    function onSelect() {
+      if (reticle.visible) {
+        imagePlane.visible = true;
+        imagePlane.position.setFromMatrixPosition(reticle.matrix);
+        imagePlane.quaternion.setFromRotationMatrix(reticle.matrix);
+        log("🖼️ Poster placed.");
+      } else {
+        log("⚠️ No surface detected. Try moving the device.");
       }
-    </style>
-  </head>
-  <body>
-    <div id="log">Loading AR...</div>
-  </body>
+    }
+  </script>
+
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #log {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.7);
+      color: #00FF00;
+      padding: 10px;
+      font-size: 14px;
+      border-radius: 8px;
+      max-width: 90%;
+    }
+  </style>
+</head>
+<body>
+  <div id="log">Loading AR app…</div>
+</body>
 </html>
