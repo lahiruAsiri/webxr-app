@@ -28,6 +28,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
     <link rel='stylesheet' href='css/common.css'>
+    <style>
+      /* Temporary styles to ensure button visibility */
+      .xr-button {
+        display: block !important;
+        background-color: #007bff;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        cursor: pointer;
+        margin-top: 10px;
+      }
+    </style>
     <title>Hit Test with PNG</title>
   </head>
   <body>
@@ -97,7 +109,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       scene.enableStats(false);
 
       let arObject = new Node();
-      arObject.visible = metaphorical;
+      arObject.visible = false;
       scene.addNode(arObject);
 
       // Replace sunflower GLTF with PNG textured plane
@@ -127,13 +139,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           textXRNotFoundTitle: "AR NOT FOUND",
           textExitXRTitle: "EXIT AR",
         });
+        console.log('xrButton.domElement:', xrButton.domElement); // Debug
+        if (!xrButton.domElement) {
+          console.warn('WebXRButton.domElement is null, creating fallback button');
+          xrButton.domElement = document.createElement('button');
+          xrButton.domElement.textContent = "START AR";
+          xrButton.domElement.className = 'xr-button';
+          xrButton.domElement.onclick = onRequestSession;
+        }
         document.querySelector('header').appendChild(xrButton.domElement);
 
         if (navigator.xr) {
           navigator.xr.isSessionSupported('immersive-ar')
                       .then((supported) => {
+            console.log('AR supported:', supported); // Debug
             xrButton.enabled = supported;
+            if (!supported) {
+              xrButton.domElement.textContent = "AR NOT SUPPORTED";
+              xrButton.domElement.disabled = true;
+            }
+          }).catch((error) => {
+            console.error('isSessionSupported error:', error);
+            xrButton.domElement.textContent = "AR ERROR";
+            xrButton.domElement.disabled = true;
           });
+        } else {
+          console.warn('navigator.xr not available');
+          xrButton.domElement.textContent = "WEBXR NOT AVAILABLE";
+          xrButton.domElement.disabled = true;
         }
       }
 
@@ -142,6 +175,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
                            .then((session) => {
           xrButton.setSession(session);
           onSessionStarted(session);
+        }).catch((error) => {
+          console.error('requestSession error:', error);
+          xrButton.domElement.textContent = "AR SESSION FAILED";
         });
       }
 
@@ -152,12 +188,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         if (!gl) {
           gl = createWebGLContext({
             xrCompatible: true,
-            alpha: true // Ensure alpha for PNG transparency
+            alpha: true
           });
 
           renderer = new Renderer(gl);
 
-          // Add shader for textured plane rendering
           renderer.addShader({
             vertexShader: `
               attribute vec3 a_position;
@@ -222,7 +257,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       }
 
       let rayOrigin = vec3.create();
-      let rayDirection = vec3.create();
+      let rayDirection = vec3.create(); // Fixed typo: 'does' to 'let'
+
       function onSelect(event) {
         if (reticle.visible) {
           addARObjectAt(reticle.matrix);
@@ -242,7 +278,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
             reticle.visible = true;
             reticle.matrix = pose.transform.matrix;
 
-            // Orient the image plane to face the viewer
             let viewerPos = vec3.fromValues(pose.transform.position.x, pose.transform.position.y, pose.transform.position.z);
             let targetPos = vec3.fromValues(pose.transform.matrix[12], pose.transform.matrix[13], pose.transform.matrix[14]);
             let direction = vec3.create();
@@ -261,7 +296,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
               -direction[0], -direction[1], -direction[2], 0,
               0, 0, 0, 1
             ), targetPos);
-            imagePlane.matrix = matrix; // Apply to image plane for orientation
+            imagePlane.matrix = matrix;
           }
         }
 
@@ -271,8 +306,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         scene.endFrame();
       }
 
-      // Start the XR application.
-      initXR();
+      // Start the XR application with error handling
+      try {
+        initXR();
+      } catch (error) {
+        console.error('initXR failed:', error);
+      }
     </script>
   </body>
 </html>
