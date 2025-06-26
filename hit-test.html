@@ -1,174 +1,212 @@
 <!doctype html>
-<!--
-Copyright 2018 The Immersive Web Community Group
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
--->
 <html>
   <head>
     <meta charset='utf-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
     <meta name='mobile-web-app-capable' content='yes'>
     <meta name='apple-mobile-web-app-capable' content='yes'>
-    <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
-    <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
-    <link rel='stylesheet' href='css/common.css'>
-
-    <title>AR Poster Demo</title>
+    <title>AR Wall Art Placement</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: black;
+        color: white;
+        font-family: Arial, sans-serif;
+      }
+      
+      header {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 100;
+      }
+      
+      .controls {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 100;
+        background: rgba(0,0,0,0.8);
+        padding: 15px;
+        border-radius: 10px;
+        min-width: 250px;
+      }
+      
+      .control-group {
+        margin-bottom: 15px;
+      }
+      
+      .control-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 12px;
+      }
+      
+      .slider {
+        width: 100%;
+        margin-bottom: 10px;
+      }
+      
+      .button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin: 2px;
+      }
+      
+      .button:hover {
+        background: #0056b3;
+      }
+      
+      .button.danger {
+        background: #dc3545;
+      }
+      
+      .button.danger:hover {
+        background: #c82333;
+      }
+      
+      .hidden {
+        display: none;
+      }
+      
+      #fileInput {
+        display: none;
+      }
+      
+      .art-gallery {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      
+      .art-thumbnail {
+        width: 60px;
+        height: 60px;
+        border: 2px solid #ccc;
+        border-radius: 5px;
+        cursor: pointer;
+        object-fit: cover;
+      }
+      
+      .art-thumbnail.selected {
+        border-color: #007bff;
+      }
+    </style>
   </head>
   <body>
     <header>
-      <details open>
-        <summary>AR Poster Demo</summary>
-        <p>
-          This sample demonstrates placing PNG posters on real-world surfaces using hit testing.
-          <a class="back" href="./">Back</a>
-        </p>
-      </details>
+      <h3>AR Wall Art Placement</h3>
+      <p>Point at a wall and tap to place art. Tap art to select and edit.</p>
     </header>
-    <script type="module">
-      import {WebXRButton} from './js/util/webxr-button.js';
-      import {Scene} from './js/render/scenes/scene.js';
-      import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
-      import {Node} from './js/render/core/node.js';
-      import {Gltf2Node} from './js/render/nodes/gltf2.js';
-      import {DropShadowNode} from './js/render/nodes/drop-shadow.js';
-      import {vec3} from './js/render/math/gl-matrix.js';
 
-      // XR globals.
+    <div class="controls">
+      <div class="control-group">
+        <label>Select Wall Art:</label>
+        <div class="art-gallery">
+          <img src="/placeholder.svg?height=400&width=300" class="art-thumbnail selected" data-art="0">
+          <img src="/placeholder.svg?height=300&width=400" class="art-thumbnail" data-art="1">
+          <img src="/placeholder.svg?height=500&width=350" class="art-thumbnail" data-art="2">
+        </div>
+        <button class="button" onclick="uploadCustomArt()">Upload Custom Art</button>
+        <input type="file" id="fileInput" accept="image/*" onchange="handleFileUpload(event)">
+      </div>
+
+      <div id="selectedControls" class="hidden">
+        <div class="control-group">
+          <label>Scale: <span id="scaleValue">1.0</span></label>
+          <input type="range" class="slider" id="scaleSlider" min="0.2" max="3" step="0.1" value="1" onchange="updateSelectedArt()">
+        </div>
+
+        <div class="control-group">
+          <label>Rotation Y: <span id="rotationYValue">0°</span></label>
+          <input type="range" class="slider" id="rotationYSlider" min="-180" max="180" step="5" value="0" onchange="updateSelectedArt()">
+        </div>
+
+        <div class="control-group">
+          <label>Rotation X: <span id="rotationXValue">0°</span></label>
+          <input type="range" class="slider" id="rotationXSlider" min="-45" max="45" step="5" value="0" onchange="updateSelectedArt()">
+        </div>
+
+        <div class="control-group">
+          <button class="button danger" onclick="deleteSelectedArt()">Delete Selected</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <small>Total artworks: <span id="artCount">0</span></small>
+      </div>
+    </div>
+
+    <script type="module">
+      // WebXR globals
       let xrButton = null;
       let xrRefSpace = null;
       let xrViewerSpace = null;
       let xrHitTestSource = null;
 
-      // WebGL scene globals.
+      // WebGL scene globals
       let gl = null;
+      let scene = null;
+      let camera = null;
       let renderer = null;
-      let scene = new Scene();
-      scene.enableStats(false);
 
-      // Create a base node for our AR content
-      let arObject = new Node();
-      arObject.visible = false;
-      scene.addNode(arObject);
+      // Wall art globals
+      let wallArts = [];
+      let selectedArtIndex = -1;
+      let currentArtTexture = 0;
+      let reticleVisible = false;
+      let reticleMatrix = new Float32Array(16);
 
-      // Create a textured quad for our poster
-      function createPosterNode(imageUrl) {
-        const posterNode = new Node();
-        
-        // Create plane geometry (1 unit wide and tall)
-        const vertices = new Float32Array([
-          -0.5, -0.5, 0,  // bottom left
-           0.5, -0.5, 0,  // bottom right
-           0.5,  0.5, 0,  // top right
-          -0.5,  0.5, 0   // top left
-        ]);
-        
-        const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
-        
-        const texCoords = new Float32Array([
-          0, 1,  // bottom left
-          1, 1,  // bottom right
-          1, 0,  // top right
-          0, 0   // top left
-        ]);
-        
-        // Create material
-        const material = {
-          baseColorTexture: { uri: imageUrl },
-          baseColorFactor: [1, 1, 1, 1],
-          doubleSided: true
-        };
-        
-        // Add render primitive to the node
-        posterNode.addRenderPrimitive({
-          vertices: vertices,
-          indices: indices,
-          texCoords: texCoords,
-          material: material
-        });
-        
-        // Scale to appropriate size (1 meter wide, height based on image aspect ratio)
-        return posterNode;
-      }
+      // Art textures
+      const artTextures = [
+        '/placeholder.svg?height=400&width=300',
+        '/placeholder.svg?height=300&width=400', 
+        '/placeholder.svg?height=500&width=350'
+      ];
 
-      // Create a sample poster (replace with your image path)
-      let poster = createPosterNode('media/images/wallart.png');
-      arObject.addNode(poster);
-
-      // Reticle for placement
-      let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
-      reticle.visible = false;
-      scene.addNode(reticle);
-
-      // Drop shadow
-      let shadow = new DropShadowNode();
-      vec3.set(shadow.scale, 0.5, 0.5, 0.5); // Adjusted for poster size
-      arObject.addNode(shadow);
-
-      const MAX_POSTERS = 30;
-      let posters = [];
-
-      // Ensure the background is transparent for AR
-      scene.clear = false;
-
+      // Initialize WebXR
       function initXR() {
-        xrButton = new WebXRButton({
-          onRequestSession: onRequestSession,
-          onEndSession: onEndSession,
-          textEnterXRTitle: "START AR",
-          textXRNotFoundTitle: "AR NOT FOUND",
-          textExitXRTitle: "EXIT AR",
-        });
-        document.querySelector('header').appendChild(xrButton.domElement);
-
         if (navigator.xr) {
           navigator.xr.isSessionSupported('immersive-ar')
-                      .then((supported) => {
-            xrButton.enabled = supported;
-          });
+            .then((supported) => {
+              if (supported) {
+                const button = document.createElement('button');
+                button.textContent = 'Start AR';
+                button.className = 'button';
+                button.onclick = startAR;
+                document.querySelector('header').appendChild(button);
+              } else {
+                document.querySelector('header').innerHTML += '<p>AR not supported</p>';
+              }
+            });
         }
       }
 
-      function onRequestSession() {
-        return navigator.xr.requestSession('immersive-ar', {requiredFeatures: ['local', 'hit-test']})
-                           .then((session) => {
-          xrButton.setSession(session);
-          onSessionStarted(session);
-        });
+      function startAR() {
+        navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['local', 'hit-test']
+        }).then(onSessionStarted);
       }
 
       function onSessionStarted(session) {
         session.addEventListener('end', onSessionEnded);
         session.addEventListener('select', onSelect);
 
-        if (!gl) {
-          gl = createWebGLContext({
-            xrCompatible: true
-          });
+        // Initialize WebGL
+        const canvas = document.createElement('canvas');
+        gl = canvas.getContext('webgl', { xrCompatible: true });
+        
+        session.updateRenderState({ 
+          baseLayer: new XRWebGLLayer(session, gl) 
+        });
 
-          renderer = new Renderer(gl);
-          scene.setRenderer(renderer);
-        }
-
-        session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
-
-        // Set up hit testing
+        // Get reference spaces
         session.requestReferenceSpace('viewer').then((refSpace) => {
           xrViewerSpace = refSpace;
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
@@ -178,66 +216,380 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         session.requestReferenceSpace('local').then((refSpace) => {
           xrRefSpace = refSpace;
+          initScene();
           session.requestAnimationFrame(onXRFrame);
         });
       }
 
-      function onEndSession(session) {
+      function onSessionEnded() {
         if (xrHitTestSource) {
           xrHitTestSource.cancel();
           xrHitTestSource = null;
         }
-        session.end();
       }
 
-      function onSessionEnded(event) {
-        xrButton.setSession(null);
+      function initScene() {
+        // Initialize Three.js-like scene setup with WebGL
+        setupWebGL();
       }
 
-      function addARObjectAt(matrix) {
-        let newPoster = arObject.clone();
-        newPoster.visible = true;
-        newPoster.matrix = matrix;
-        scene.addNode(newPoster);
+      function setupWebGL() {
+        // Enable depth testing
+        gl.enable(gl.DEPTH_TEST);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-        posters.push(newPoster);
+        // Create shader program for wall art
+        const vertexShaderSource = `
+          attribute vec3 position;
+          attribute vec2 uv;
+          uniform mat4 modelViewMatrix;
+          uniform mat4 projectionMatrix;
+          varying vec2 vUv;
+          
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `;
 
-        // Limit the number of posters for performance
-        if (posters.length > MAX_POSTERS) {
-          let oldPoster = posters.shift();
-          scene.removeNode(oldPoster);
-        }
+        const fragmentShaderSource = `
+          precision mediump float;
+          uniform sampler2D texture;
+          uniform float opacity;
+          uniform vec3 tint;
+          varying vec2 vUv;
+          
+          void main() {
+            vec4 texColor = texture2D(texture, vUv);
+            gl_FragColor = vec4(texColor.rgb * tint, texColor.a * opacity);
+          }
+        `;
+
+        // Compile shaders and create program
+        window.shaderProgram = createShaderProgram(vertexShaderSource, fragmentShaderSource);
+        
+        // Create geometry for wall art plane
+        createWallArtGeometry();
+      }
+
+      function createShaderProgram(vertexSource, fragmentSource) {
+        const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vertexShader, vertexSource);
+        gl.compileShader(vertexShader);
+
+        const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fragmentShader, fragmentSource);
+        gl.compileShader(fragmentShader);
+
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+
+        return program;
+      }
+
+      function createWallArtGeometry() {
+        // Create plane geometry for wall art
+        const vertices = new Float32Array([
+          -0.5, -0.65, 0,  0, 1,  // bottom left
+           0.5, -0.65, 0,  1, 1,  // bottom right
+           0.5,  0.65, 0,  1, 0,  // top right
+          -0.5,  0.65, 0,  0, 0   // top left
+        ]);
+
+        const indices = new Uint16Array([
+          0, 1, 2,
+          0, 2, 3
+        ]);
+
+        window.vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, window.vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+        window.indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, window.indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+      }
+
+      function loadTexture(url) {
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        
+        // Fill with placeholder color while loading
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = function() {
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        };
+        image.src = url;
+        
+        return texture;
       }
 
       function onSelect(event) {
-        if (reticle.visible) {
-          addARObjectAt(reticle.matrix);
+        if (reticleVisible) {
+          // Check if we're selecting an existing wall art
+          const selectedArt = checkWallArtSelection(event);
+          if (selectedArt !== -1) {
+            selectWallArt(selectedArt);
+          } else {
+            // Place new wall art
+            placeWallArt();
+          }
+        }
+      }
+
+      function checkWallArtSelection(event) {
+        // Simple selection based on proximity to reticle
+        // In a real implementation, you'd do proper ray casting
+        return -1; // For now, always place new art
+      }
+
+      function placeWallArt() {
+        const wallArt = {
+          matrix: new Float32Array(reticleMatrix),
+          scale: 1.0,
+          rotationX: 0,
+          rotationY: 0,
+          textureIndex: currentArtTexture,
+          texture: loadTexture(artTextures[currentArtTexture]),
+          selected: false
+        };
+
+        wallArts.push(wallArt);
+        updateArtCount();
+
+        // Limit number of artworks
+        if (wallArts.length > 20) {
+          wallArts.shift();
+        }
+      }
+
+      function selectWallArt(index) {
+        // Deselect all
+        wallArts.forEach(art => art.selected = false);
+        
+        if (index >= 0 && index < wallArts.length) {
+          wallArts[index].selected = true;
+          selectedArtIndex = index;
+          showSelectedControls();
+          updateControlValues();
+        } else {
+          selectedArtIndex = -1;
+          hideSelectedControls();
         }
       }
 
       function onXRFrame(t, frame) {
-        let session = frame.session;
-        let pose = frame.getViewerPose(xrRefSpace);
+        const session = frame.session;
+        const pose = frame.getViewerPose(xrRefSpace);
 
-        reticle.visible = false;
-
-        // Update hit test results
         if (xrHitTestSource && pose) {
-          let hitTestResults = frame.getHitTestResults(xrHitTestSource);
+          const hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
-            let pose = hitTestResults[0].getPose(xrRefSpace);
-            reticle.visible = true;
-            reticle.matrix = pose.transform.matrix;
+            const hit = hitTestResults[0];
+            const hitPose = hit.getPose(xrRefSpace);
+            reticleMatrix.set(hitPose.transform.matrix);
+            reticleVisible = true;
+          } else {
+            reticleVisible = false;
           }
         }
 
-        scene.startFrame();
+        if (pose) {
+          gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+          for (const view of pose.views) {
+            const viewport = session.renderState.baseLayer.getViewport(view);
+            gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
+
+            // Render reticle
+            if (reticleVisible) {
+              renderReticle(view.projectionMatrix, view.transform.inverse.matrix);
+            }
+
+            // Render wall arts
+            wallArts.forEach((wallArt, index) => {
+              renderWallArt(wallArt, view.projectionMatrix, view.transform.inverse.matrix);
+            });
+          }
+        }
+
         session.requestAnimationFrame(onXRFrame);
-        scene.drawXRFrame(frame, pose);
-        scene.endFrame();
       }
 
-      // Start the XR application
+      function renderReticle(projectionMatrix, viewMatrix) {
+        // Simple reticle rendering - you could make this more sophisticated
+        gl.useProgram(window.shaderProgram);
+        
+        // Set up matrices for reticle
+        const modelMatrix = reticleMatrix;
+        const modelViewMatrix = multiplyMatrices(viewMatrix, modelMatrix);
+        
+        // Render a simple circle or ring for reticle
+        // This is a simplified version - you'd want proper geometry
+      }
+
+      function renderWallArt(wallArt, projectionMatrix, viewMatrix) {
+        gl.useProgram(window.shaderProgram);
+
+        // Create model matrix with transformations
+        const modelMatrix = createModelMatrix(wallArt);
+        const modelViewMatrix = multiplyMatrices(viewMatrix, modelMatrix);
+
+        // Set uniforms
+        const modelViewLocation = gl.getUniformLocation(window.shaderProgram, 'modelViewMatrix');
+        const projectionLocation = gl.getUniformLocation(window.shaderProgram, 'projectionMatrix');
+        const textureLocation = gl.getUniformLocation(window.shaderProgram, 'texture');
+        const opacityLocation = gl.getUniformLocation(window.shaderProgram, 'opacity');
+        const tintLocation = gl.getUniformLocation(window.shaderProgram, 'tint');
+
+        gl.uniformMatrix4fv(modelViewLocation, false, modelViewMatrix);
+        gl.uniformMatrix4fv(projectionLocation, false, projectionMatrix);
+        gl.uniform1f(opacityLocation, 1.0);
+        gl.uniform3f(tintLocation, wallArt.selected ? 1.2 : 1.0, wallArt.selected ? 1.2 : 1.0, wallArt.selected ? 1.0 : 1.0);
+
+        // Bind texture
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, wallArt.texture);
+        gl.uniform1i(textureLocation, 0);
+
+        // Bind geometry
+        gl.bindBuffer(gl.ARRAY_BUFFER, window.vertexBuffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, window.indexBuffer);
+
+        const positionLocation = gl.getAttribLocation(window.shaderProgram, 'position');
+        const uvLocation = gl.getAttribLocation(window.shaderProgram, 'uv');
+
+        gl.enableVertexAttribArray(positionLocation);
+        gl.enableVertexAttribArray(uvLocation);
+
+        gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 20, 0);
+        gl.vertexAttribPointer(uvLocation, 2, gl.FLOAT, false, 20, 12);
+
+        // Draw
+        gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+      }
+
+      function createModelMatrix(wallArt) {
+        // Create transformation matrix
+        const matrix = new Float32Array(wallArt.matrix);
+        
+        // Apply scale
+        matrix[0] *= wallArt.scale;
+        matrix[5] *= wallArt.scale;
+        matrix[10] *= wallArt.scale;
+
+        // Apply rotations (simplified)
+        // In a real implementation, you'd properly compose rotation matrices
+        
+        return matrix;
+      }
+
+      function multiplyMatrices(a, b) {
+        // Matrix multiplication - simplified version
+        // You'd want to use a proper math library for this
+        const result = new Float32Array(16);
+        
+        for (let i = 0; i < 4; i++) {
+          for (let j = 0; j < 4; j++) {
+            result[i * 4 + j] = 
+              a[i * 4 + 0] * b[0 * 4 + j] +
+              a[i * 4 + 1] * b[1 * 4 + j] +
+              a[i * 4 + 2] * b[2 * 4 + j] +
+              a[i * 4 + 3] * b[3 * 4 + j];
+          }
+        }
+        
+        return result;
+      }
+
+      // UI Functions
+      window.uploadCustomArt = function() {
+        document.getElementById('fileInput').click();
+      };
+
+      window.handleFileUpload = function(event) {
+        const file = event.target.files[0];
+        if (file) {
+          const url = URL.createObjectURL(file);
+          artTextures.push(url);
+          
+          // Add thumbnail
+          const gallery = document.querySelector('.art-gallery');
+          const img = document.createElement('img');
+          img.src = url;
+          img.className = 'art-thumbnail';
+          img.dataset.art = artTextures.length - 1;
+          img.onclick = () => selectArtTexture(artTextures.length - 1);
+          gallery.appendChild(img);
+        }
+      };
+
+      window.selectArtTexture = function(index) {
+        currentArtTexture = index;
+        document.querySelectorAll('.art-thumbnail').forEach((thumb, i) => {
+          thumb.classList.toggle('selected', i === index);
+        });
+      };
+
+      window.updateSelectedArt = function() {
+        if (selectedArtIndex >= 0) {
+          const wallArt = wallArts[selectedArtIndex];
+          wallArt.scale = parseFloat(document.getElementById('scaleSlider').value);
+          wallArt.rotationY = parseFloat(document.getElementById('rotationYSlider').value) * Math.PI / 180;
+          wallArt.rotationX = parseFloat(document.getElementById('rotationXSlider').value) * Math.PI / 180;
+          
+          updateControlValues();
+        }
+      };
+
+      window.deleteSelectedArt = function() {
+        if (selectedArtIndex >= 0) {
+          wallArts.splice(selectedArtIndex, 1);
+          selectedArtIndex = -1;
+          hideSelectedControls();
+          updateArtCount();
+        }
+      };
+
+      function showSelectedControls() {
+        document.getElementById('selectedControls').classList.remove('hidden');
+      }
+
+      function hideSelectedControls() {
+        document.getElementById('selectedControls').classList.add('hidden');
+      }
+
+      function updateControlValues() {
+        if (selectedArtIndex >= 0) {
+          const wallArt = wallArts[selectedArtIndex];
+          document.getElementById('scaleValue').textContent = wallArt.scale.toFixed(1);
+          document.getElementById('rotationYValue').textContent = Math.round(wallArt.rotationY * 180 / Math.PI) + '°';
+          document.getElementById('rotationXValue').textContent = Math.round(wallArt.rotationX * 180 / Math.PI) + '°';
+        }
+      }
+
+      function updateArtCount() {
+        document.getElementById('artCount').textContent = wallArts.length;
+      }
+
+      // Initialize art thumbnails
+      document.querySelectorAll('.art-thumbnail').forEach((thumb, index) => {
+        thumb.onclick = () => selectArtTexture(index);
+      });
+
+      // Start the application
       initXR();
     </script>
   </body>
