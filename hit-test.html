@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <!--
 Copyright 2018 The Immersive Web Community Group
 
@@ -28,15 +28,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
     <link rel='stylesheet' href='css/common.css'>
-
-    <title>Hit Test</title>
+    <title>Hit Test with PNG</title>
   </head>
   <body>
     <header>
       <details open>
-        <summary>Hit Test</summary>
+        <summary>Hit Test with PNG</summary>
         <p>
-          This sample demonstrates the use of hit testing to place virtual objects on real-world surfaces.
+          This sample demonstrates the use of hit testing to place a PNG image on real-world surfaces.
           <a class="back" href="./">Back</a>
         </p>
       </details>
@@ -48,8 +47,42 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       import {Node} from './js/render/core/node.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {DropShadowNode} from './js/render/nodes/drop-shadow.js';
-      import {vec3} from './js/render/math/gl-matrix.js';
+      import {vec3, mat4} from './js/render/math/gl-matrix.js';
       import {Ray} from './js/render/math/ray.js';
+
+      // Custom function to create a textured plane for the PNG
+      function createTexturedPlane(url) {
+        const geometry = {
+          vertices: new Float32Array([
+            -0.5, -0.5, 0, // Bottom-left
+             0.5, -0.5, 0, // Bottom-right
+             0.5,  0.5, 0, // Top-right
+            -0.5,  0.5, 0  // Top-left
+          ]),
+          indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+          texcoords: new Float32Array([
+            0, 0, // Bottom-left
+            1, 0, // Bottom-right
+            1, 1, // Top-right
+            0, 1  // Top-left
+          ])
+        };
+
+        const texture = new Image();
+        texture.src = url;
+        texture.crossOrigin = 'anonymous';
+
+        const node = new Node();
+        node.geometry = geometry;
+        node.texture = texture;
+        node.onload = () => {
+          texture.onload = () => {
+            node.texture = texture;
+          };
+        };
+
+        return node;
+      }
 
       // XR globals.
       let xrButton = null;
@@ -64,24 +97,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       scene.enableStats(false);
 
       let arObject = new Node();
-      arObject.visible = false;
+      arObject.visible = metaphorical;
       scene.addNode(arObject);
 
-      let flower = new Gltf2Node({url: 'media/gltf/sunflower/sunflower.gltf'});
-      arObject.addNode(flower);
+      // Replace sunflower GLTF with PNG textured plane
+      let imagePlane = createTexturedPlane('media/images/wallart.png'); // Replace with your PNG path
+      arObject.addNode(imagePlane);
 
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
       scene.addNode(reticle);
 
-      // Having a really simple drop shadow underneath an object helps ground
-      // it in the world without adding much complexity.
+      // Drop shadow for grounding the object
       let shadow = new DropShadowNode();
       vec3.set(shadow.scale, 0.15, 0.15, 0.15);
       arObject.addNode(shadow);
 
-      const MAX_FLOWERS = 30;
-      let flowers = [];
+      const MAX_OBJECTS = 30;
+      let objects = [];
 
       // Ensure the background is transparent for AR.
       scene.clear = false;
@@ -92,7 +125,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           onEndSession: onEndSession,
           textEnterXRTitle: "START AR",
           textXRNotFoundTitle: "AR NOT FOUND",
-          textExitXRTitle: "EXIT  AR",
+          textExitXRTitle: "EXIT AR",
         });
         document.querySelector('header').appendChild(xrButton.domElement);
 
@@ -118,20 +151,39 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         if (!gl) {
           gl = createWebGLContext({
-            xrCompatible: true
+            xrCompatible: true,
+            alpha: true // Ensure alpha for PNG transparency
           });
 
           renderer = new Renderer(gl);
+
+          // Add shader for textured plane rendering
+          renderer.addShader({
+            vertexShader: `
+              attribute vec3 a_position;
+              attribute vec2 a_texcoord;
+              uniform mat4 u_matrix;
+              varying vec2 v_texcoord;
+              void main() {
+                gl_Position = u_matrix * vec4(a_position, 1.0);
+                v_texcoord = a_texcoord;
+              }
+            `,
+            fragmentShader: `
+              precision mediump float;
+              varying vec2 v_texcoord;
+              uniform sampler2D u_texture;
+              void main() {
+                gl_FragColor = texture2D(u_texture, v_texcoord);
+              }
+            `
+          });
 
           scene.setRenderer(renderer);
         }
 
         session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
 
-        // In this sample we want to cast a ray straight out from the viewer's
-        // position and render a reticle where it intersects with a real world
-        // surface. To do this we first get the viewer space, then create a
-        // hitTestSource that tracks it.
         session.requestReferenceSpace('viewer').then((refSpace) => {
           xrViewerSpace = refSpace;
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
@@ -141,7 +193,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
         session.requestReferenceSpace('local').then((refSpace) => {
           xrRefSpace = refSpace;
-
           session.requestAnimationFrame(onXRFrame);
         });
       }
@@ -156,22 +207,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         xrButton.setSession(null);
       }
 
-      // Adds a new object to the scene at the
-      // specified transform.
       function addARObjectAt(matrix) {
-        let newFlower = arObject.clone();
-        newFlower.visible = true;
-        newFlower.matrix = matrix;
-        scene.addNode(newFlower);
+        let newObject = arObject.clone();
+        newObject.visible = true;
+        newObject.matrix = matrix;
+        scene.addNode(newObject);
 
-        flowers.push(newFlower);
+        objects.push(newObject);
 
-        // For performance reasons if we add too many objects start
-        // removing the oldest ones to keep the scene complexity
-        // from growing too much.
-        if (flowers.length > MAX_FLOWERS) {
-          let oldFlower = flowers.shift();
-          scene.removeNode(oldFlower);
+        if (objects.length > MAX_OBJECTS) {
+          let oldObject = objects.shift();
+          scene.removeNode(oldObject);
         }
       }
 
@@ -179,37 +225,49 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       let rayDirection = vec3.create();
       function onSelect(event) {
         if (reticle.visible) {
-          // The reticle should already be positioned at the latest hit point, 
-          // so we can just use it's matrix to save an unnecessary call to 
-          // event.frame.getHitTestResults.
           addARObjectAt(reticle.matrix);
         }
       }
 
-      // Called every time a XRSession requests that a new frame be drawn.
       function onXRFrame(t, frame) {
         let session = frame.session;
         let pose = frame.getViewerPose(xrRefSpace);
 
         reticle.visible = false;
 
-        // If we have a hit test source, get its results for the frame
-        // and use the pose to display a reticle in the scene.
         if (xrHitTestSource && pose) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
             let pose = hitTestResults[0].getPose(xrRefSpace);
             reticle.visible = true;
             reticle.matrix = pose.transform.matrix;
+
+            // Orient the image plane to face the viewer
+            let viewerPos = vec3.fromValues(pose.transform.position.x, pose.transform.position.y, pose.transform.position.z);
+            let targetPos = vec3.fromValues(pose.transform.matrix[12], pose.transform.matrix[13], pose.transform.matrix[14]);
+            let direction = vec3.create();
+            vec3.subtract(direction, viewerPos, targetPos);
+            vec3.normalize(direction, direction);
+            let up = vec3.fromValues(0, 1, 0);
+            let right = vec3.create();
+            vec3.cross(right, direction, up);
+            vec3.normalize(right, right);
+            let newUp = vec3.create();
+            vec3.cross(newUp, right, direction);
+            let matrix = mat4.create();
+            mat4.fromRotationTranslation(matrix, mat4.fromValues(
+              right[0], right[1], right[2], 0,
+              newUp[0], newUp[1], newUp[2], 0,
+              -direction[0], -direction[1], -direction[2], 0,
+              0, 0, 0, 1
+            ), targetPos);
+            imagePlane.matrix = matrix; // Apply to image plane for orientation
           }
         }
 
         scene.startFrame();
-
         session.requestAnimationFrame(onXRFrame);
-
         scene.drawXRFrame(frame, pose);
-
         scene.endFrame();
       }
 
